@@ -378,8 +378,8 @@ function AvatarModel({
     for (const e of faceRig.lidTop) shift(e, -0.009 * (lidClose + lidSquint), 0);
     for (const e of faceRig.lidBottom) shift(e, 0.004 * lidClose, 0);
 
-    for (const e of faceRig.lipCorner) shift(e, 0.006 * f.smile, 0.004 * f.smile);
-    for (const e of faceRig.cheek) shift(e, 0.004 * f.smile, 0.001 * f.smile);
+    for (const e of faceRig.lipCorner) shift(e, 0.010 * f.smile, 0.007 * f.smile);
+    for (const e of faceRig.cheek) shift(e, 0.006 * f.smile, 0.0015 * f.smile);
     for (const e of faceRig.brow) shift(e, 0.0015 * f.smile, 0);
 
     // Head micro-motion layered on top of the baked clip. This must stay at the
