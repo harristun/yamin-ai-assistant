@@ -64,7 +64,7 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
     });
     return fbx;
 
-  }, [fbx]);
+  }, [fbx, baseColor, normal]);
 
 
   const { actions, names } = useAnimations(fbx.animations, group);
