@@ -31,16 +31,46 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
-      // The FBX references external WebP textures that three.js cannot decode,
-      // so give every surface a soft studio material instead of a black one.
-      mesh.material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color("#eadfd0"),
-        roughness: 0.6,
-        metalness: 0.05,
+
+      // Keep the FBX's embedded textures, but upgrade the legacy Phong/Lambert
+      // materials to PBR so the avatar reads correctly under studio lighting.
+      const source = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const upgraded = source.map((mat) => {
+        const m = mat as THREE.MeshPhongMaterial & { normalMap?: THREE.Texture };
+        if (!m) return mat;
+        if ((m as unknown as THREE.MeshStandardMaterial).isMeshStandardMaterial) return mat;
+
+        const map = m.map ?? null;
+        if (map) {
+          map.colorSpace = THREE.SRGBColorSpace;
+          map.needsUpdate = true;
+        }
+        const normalMap = m.normalMap ?? null;
+        if (normalMap) {
+          normalMap.colorSpace = THREE.NoColorSpace;
+          normalMap.needsUpdate = true;
+        }
+
+        const std = new THREE.MeshStandardMaterial({
+          name: m.name,
+          map,
+          normalMap,
+          color: map ? new THREE.Color("#ffffff") : new THREE.Color("#eadfd0"),
+          roughness: 0.62,
+          metalness: 0.04,
+          transparent: m.transparent,
+          opacity: m.opacity,
+          side: m.side,
+          skinning: false,
+        } as THREE.MeshStandardMaterialParameters);
+        if (normalMap) std.normalScale.set(0.9, 0.9);
+        return std;
       });
+      mesh.material = Array.isArray(mesh.material) ? upgraded : upgraded[0]!;
     });
     return fbx;
   }, [fbx]);
+
 
   const { actions, names } = useAnimations(fbx.animations, group);
 
