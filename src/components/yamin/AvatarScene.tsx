@@ -106,6 +106,9 @@ function AvatarModel({
       const center = scaled.getCenter(new THREE.Vector3());
       fbx.position.set(-center.x, -scaled.min.y, -center.z);
     }
+    return fbx;
+  }, [fbx, baseColor]);
+
   // Idle library. `idle-long` is the resting base loop (loaded up front); the
   // variation clips stream in one at a time afterwards — each FBX is ~12 MB and
   // requesting them all in parallel made the browser abort the downloads.
@@ -121,9 +124,6 @@ function AvatarModel({
     }
     return [...out, ...extraClips];
   }, [idleLong, extraClips]);
-
-    return out;
-  }, [idleLong, idleActive, idleDwarf, idleStanding]);
 
   const { actions, names } = useAnimations(clips, group);
   const [active, setActive] = useState("idle-long");
