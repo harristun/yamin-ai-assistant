@@ -61,12 +61,14 @@ export function ChatPanel({
                   <p className="font-burmese break-words whitespace-pre-wrap">{m.text}</p>
                 </div>
                 <p
+                  suppressHydrationWarning
                   className={`mt-1 text-[10px] text-muted-foreground ${
                     m.role === "user" ? "text-right" : ""
                   }`}
                 >
                   {m.time}
                 </p>
+
               </div>
             </motion.div>
           ))}
