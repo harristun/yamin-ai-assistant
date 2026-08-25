@@ -324,9 +324,8 @@ function AvatarModel({
   const face = useRef({ nextBlink: 1.5, blink: 0, smile: 0, nextSmile: 3, smileHold: 0 });
 
 
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     const f = face.current;
-    const t = state.clock.elapsedTime;
 
     // Blink: quick double-lid close at random intervals.
     f.nextBlink -= delta;
@@ -340,11 +339,11 @@ function AvatarModel({
     // is speaking or listening to the user.
     f.nextSmile -= delta;
     if (f.nextSmile <= 0) {
-      f.smileHold = 1.6 + Math.random() * 2.4;
-      f.nextSmile = (speaking || listening ? 4 : 7) + Math.random() * 6;
+      f.smileHold = 2.2 + Math.random() * 2.6;
+      f.nextSmile = (speaking || listening ? 3.5 : 6) + Math.random() * 5;
     }
     f.smileHold = Math.max(0, f.smileHold - delta);
-    const smileTarget = f.smileHold > 0 ? (speaking ? 0.85 : 0.6) : 0.12;
+    const smileTarget = f.smileHold > 0 ? (speaking ? 1 : 0.85) : 0.15;
     f.smile += (smileTarget - f.smile) * Math.min(1, delta * 3);
 
     const blinkValue = Math.sin(Math.min(1, f.blink) * Math.PI);
@@ -357,6 +356,8 @@ function AvatarModel({
 
     // Bone-driven face: lids slide shut, lip corners and cheeks lift. Offsets are
     // metres in world space, converted per bone into its parent space.
+    // Only face bones are touched — the head bone itself is left entirely to the
+    // baked body clips so her head keeps moving with the original animation.
     const shift = (e: FaceBone, upM: number, outM: number) => {
       e.bone.position
         .copy(e.restPos)
@@ -364,25 +365,17 @@ function AvatarModel({
         .addScaledVector(e.out, outM * e.unit);
     };
 
-    const lidClose = blinkValue * (1 - f.smile * 0.15);
+    const lidClose = blinkValue * (1 - f.smile * 0.1);
     // A smile narrows the eyes slightly on top of any blink.
-    const lidSquint = f.smile * 0.18;
+    const lidSquint = f.smile * 0.3;
     for (const e of faceRig.lidTop) shift(e, -0.009 * (lidClose + lidSquint), 0);
-    for (const e of faceRig.lidBottom) shift(e, 0.004 * lidClose, 0);
+    for (const e of faceRig.lidBottom) shift(e, 0.004 * lidClose + 0.0025 * f.smile, 0);
 
-    for (const e of faceRig.lipCorner) shift(e, 0.010 * f.smile, 0.007 * f.smile);
-    for (const e of faceRig.cheek) shift(e, 0.006 * f.smile, 0.0015 * f.smile);
-    for (const e of faceRig.brow) shift(e, 0.0015 * f.smile, 0);
-
-    // Head micro-motion layered on top of the baked clip. This must stay at the
-    // default frame priority: any priority >= 1 switches R3F to a manual render
-    // loop, which stops the canvas from drawing at all.
-    if (head) {
-      head.rotation.y += Math.sin(t * 0.45) * 0.035;
-      head.rotation.x += Math.sin(t * 0.7 + 1.1) * 0.02 - f.smile * 0.015;
-      head.rotation.z += Math.sin(t * 0.33 + 2.2) * 0.018;
-    }
+    for (const e of faceRig.lipCorner) shift(e, 0.020 * f.smile, 0.014 * f.smile);
+    for (const e of faceRig.cheek) shift(e, 0.012 * f.smile, 0.003 * f.smile);
+    for (const e of faceRig.brow) shift(e, 0.004 * f.smile, 0);
   });
+
 
 
 
