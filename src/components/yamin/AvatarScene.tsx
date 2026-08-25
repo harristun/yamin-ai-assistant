@@ -206,7 +206,6 @@ function AvatarModel({
       controls.target.set(0, focusY, 0);
       controls.update();
     }
-    console.log("YAMIN_FIT", JSON.stringify({ y: focusY, z: camera.position.z }));
   });
 
   return (
