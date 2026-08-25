@@ -25,7 +25,9 @@ const FRAMING: Record<Breakpoint, { fov: number; margin: number; height: number 
 
 function AvatarModel({ speaking, listening }: { speaking: boolean; listening: boolean }) {
   const fbx = useFBX(modelAsset.url);
-  const [baseColor, normal] = useTexture([baseColorAsset.url, normalAsset.url]);
+  const textures = useTexture([baseColorAsset.url, normalAsset.url]);
+  const baseColor = textures[0]!;
+  const normal = textures[1]!;
   const group = useRef<THREE.Group>(null);
 
   const model = useMemo(() => {
@@ -52,6 +54,7 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
           name: m?.name ?? "yamin-skin",
           map: baseColor,
           normalMap: normal,
+
           color: new THREE.Color("#ffffff"),
           roughness: 0.55,
           metalness: 0.05,
