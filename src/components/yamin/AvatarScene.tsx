@@ -284,8 +284,9 @@ function AvatarModel({
     const lidTop: FaceBone[] = [];
     const lidBottom: FaceBone[] = [];
     const lipCorner: FaceBone[] = [];
-    const cheek: FaceBone[] = [];
-    const brow: FaceBone[] = [];
+    // Keep expressions scoped tightly to eyelids and mouth corners. Moving
+    // cheek/brow helper bones on this rig also pulls the nose/eye socket area,
+    // which creates the occasional warped face seen during idle crossfades.
 
     model.updateMatrixWorld(true);
     const q = new THREE.Quaternion();
@@ -312,12 +313,10 @@ function AvatarModel({
       const side = /^[a-z]+[TB]?L\d*$/i.test(n) ? 1 : -1;
       if (/^lidT[LR]\d*$/i.test(n)) lidTop.push(make(child, side));
       else if (/^lidB[LR]\d*$/i.test(n)) lidBottom.push(make(child, side));
-      else if (/^lip[TB][LR](?:001)?$/i.test(n)) lipCorner.push(make(child, side));
-      else if (/^cheek[TB][LR]\d*$/i.test(n)) cheek.push(make(child, side));
-      else if (/^brow[TB][LR]\d*$/i.test(n)) brow.push(make(child, side));
+      else if (/^lip[TB][LR]001$/i.test(n)) lipCorner.push(make(child, side));
     });
 
-    return { lidTop, lidBottom, lipCorner, cheek, brow };
+    return { lidTop, lidBottom, lipCorner };
   }, [model]);
 
   // The exported character carries two upper-body chains: the baked idles drive
@@ -365,7 +364,7 @@ function AvatarModel({
       f.nextSmile = (speaking || listening ? 3.5 : 6) + Math.random() * 5;
     }
     f.smileHold = Math.max(0, f.smileHold - delta);
-    const smileTarget = f.smileHold > 0 ? (speaking ? 1 : 0.85) : 0.15;
+    const smileTarget = f.smileHold > 0 ? (speaking ? 0.78 : 0.62) : 0.08;
     f.smile += (smileTarget - f.smile) * Math.min(1, delta * 3);
 
     const blinkValue = Math.sin(Math.min(1, f.blink) * Math.PI);
@@ -414,15 +413,13 @@ function AvatarModel({
         .addScaledVector(e.out, outM * e.unit);
     };
 
-    const lidClose = blinkValue * (1 - f.smile * 0.1);
-    // A smile narrows the eyes slightly on top of any blink.
-    const lidSquint = f.smile * 0.34;
-    for (const e of faceRig.lidTop) shift(e, -0.009 * (lidClose + lidSquint), 0);
-    for (const e of faceRig.lidBottom) shift(e, 0.004 * lidClose + 0.003 * f.smile, 0);
+    const lidClose = blinkValue;
+    // Smile can warm the eyes, but keep squint very small to avoid nose/eye warping.
+    const lidSquint = f.smile * 0.08;
+    for (const e of faceRig.lidTop) shift(e, -0.007 * lidClose - 0.0012 * lidSquint, 0);
+    for (const e of faceRig.lidBottom) shift(e, 0.0032 * lidClose, 0);
 
-    for (const e of faceRig.lipCorner) shift(e, 0.026 * f.smile, 0.018 * f.smile);
-    for (const e of faceRig.cheek) shift(e, 0.016 * f.smile, 0.004 * f.smile);
-    for (const e of faceRig.brow) shift(e, 0.005 * f.smile, 0);
+    for (const e of faceRig.lipCorner) shift(e, 0.017 * f.smile, 0.009 * f.smile);
   });
 
 
