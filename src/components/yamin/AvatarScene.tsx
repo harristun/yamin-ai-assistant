@@ -331,6 +331,10 @@ function AvatarModel({
     if (import.meta.env.DEV && Math.floor(t) % 2 === 0) {
       const box = new THREE.Box3().setFromObject(model);
       (window as any).YAMIN_FIT = {
+        render: { calls: state.gl.info.render.calls, tris: state.gl.info.render.triangles },
+        vis: model.visible,
+        parentVis: model.parent?.visible,
+
         min: box.min.toArray().map((n) => +n.toFixed(2)),
         max: box.max.toArray().map((n) => +n.toFixed(2)),
         scale: model.scale.toArray(),
