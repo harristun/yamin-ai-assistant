@@ -306,7 +306,20 @@ function AvatarModel({
       head.rotation.x += Math.sin(t * 0.7 + 1.1) * 0.02 - f.smile * 0.015;
       head.rotation.z += Math.sin(t * 0.33 + 2.2) * 0.018;
     }
+
+    if (import.meta.env.DEV && Math.floor(t) % 2 === 0) {
+      const box = new THREE.Box3().setFromObject(model);
+      (window as any).YAMIN_FIT = {
+        min: box.min.toArray().map((n) => +n.toFixed(2)),
+        max: box.max.toArray().map((n) => +n.toFixed(2)),
+        scale: model.scale.toArray(),
+        active,
+        clips: names,
+        cam: state.camera.position.toArray().map((n) => +n.toFixed(2)),
+      };
+    }
   }, 1);
+
 
 
   // The model is normalized once above. Only update the camera here; repeatedly
