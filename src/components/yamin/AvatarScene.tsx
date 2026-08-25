@@ -352,7 +352,7 @@ function AvatarModel({
       f.nextSmile = (speaking || listening ? 4 : 7) + Math.random() * 6;
     }
     f.smileHold = Math.max(0, f.smileHold - delta);
-    const smileTarget = f.smileHold > 0 ? (speaking ? 0.85 : 0.6) : 0.12;
+    const smileTarget = (window as any).__YM_FORCE_SMILE ?? (f.smileHold > 0 ? (speaking ? 0.85 : 0.6) : 0.12);
     f.smile += (smileTarget - f.smile) * Math.min(1, delta * 3);
 
     const blinkValue = Math.sin(Math.min(1, f.blink) * Math.PI);
