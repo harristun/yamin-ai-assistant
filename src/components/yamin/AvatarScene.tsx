@@ -1,4 +1,4 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   ContactShadows,
   Environment,
@@ -17,16 +17,20 @@ import type { Breakpoint } from "@/hooks/useBreakpoint";
 
 type Framing = {
   fov: number;
-  position: [number, number, number];
-  target: [number, number, number];
+  /** Vertical focus as a fraction of the figure height (1 = top of head). */
+  focus: number;
+  /** Camera distance as a multiple of the figure height. */
+  distance: number;
 };
 
 // Portrait-style framing on small screens, more of the figure as space grows.
 const FRAMING: Record<Breakpoint, Framing> = {
-  mobile: { fov: 30, position: [0, 1.5, 1.5], target: [0, 1.42, 0] },
-  tablet: { fov: 32, position: [0, 1.4, 2.1], target: [0, 1.3, 0] },
-  desktop: { fov: 34, position: [0, 1.35, 2.7], target: [0, 1.15, 0] },
+  mobile: { fov: 30, focus: 0.86, distance: 0.95 },
+  tablet: { fov: 32, focus: 0.8, distance: 1.25 },
+  desktop: { fov: 34, focus: 0.72, distance: 1.6 },
 };
+
+const FIGURE_HEIGHT = 1.7;
 
 function AvatarModel({ speaking, listening }: { speaking: boolean; listening: boolean }) {
   const fbx = useFBX(modelAsset.url);
@@ -39,10 +43,8 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
     // The FBX embeds its PBR maps as WebP, which the FBX loader cannot decode,
     // so the same maps are re-applied here from extracted image assets.
     baseColor.colorSpace = THREE.SRGBColorSpace;
-    baseColor.flipY = false;
     baseColor.needsUpdate = true;
     normal.colorSpace = THREE.NoColorSpace;
-    normal.flipY = false;
     normal.needsUpdate = true;
 
     fbx.traverse((child) => {
