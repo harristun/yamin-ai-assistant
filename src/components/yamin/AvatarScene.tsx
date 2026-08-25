@@ -15,7 +15,19 @@ import textureAsset from "@/assets/yamin_texture.png.asset.json";
 import idleDwarfAsset from "@/assets/yamin_idle_dwarf.fbx.asset.json";
 import idleStandingAsset from "@/assets/yamin_idle_standing.fbx.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
-import { AmbientLight, DirectionalLight, Group, PointLight, Primitive, SpotLight } from "./three-elements";
+import {
+  AmbientLight,
+  DirectionalLight,
+  Group,
+  PointLight,
+  Primitive,
+  SpotLight,
+  stripDataProps,
+} from "./three-elements";
+
+const SafeContactShadows = stripDataProps(ContactShadows as any, "ContactShadows");
+const SafeEnvironment = stripDataProps(Environment as any, "Environment");
+const SafeOrbitControls = stripDataProps(OrbitControls as any, "OrbitControls");
 
 type Framing = {
   fov: number;
@@ -243,7 +255,7 @@ export default function AvatarScene({
 
       <AvatarModel speaking={speaking} listening={listening} framing={framing} />
 
-      <ContactShadows
+      <SafeContactShadows
         position={[0, 0.005, 0]}
         opacity={0.35}
         scale={6}
@@ -251,8 +263,8 @@ export default function AvatarScene({
         far={2.5}
         color="#5a4222"
       />
-      <Environment preset="city" environmentIntensity={0.7} />
-      <OrbitControls
+      <SafeEnvironment preset="city" environmentIntensity={0.7} />
+      <SafeOrbitControls
         makeDefault
         enablePan={false}
         enableZoom={breakpoint !== "mobile"}
