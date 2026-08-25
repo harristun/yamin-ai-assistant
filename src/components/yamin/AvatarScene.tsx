@@ -116,15 +116,13 @@ function AvatarModel({
     if (action) action.timeScale = speaking ? 1.25 : listening ? 1.05 : 0.85;
   }, [actions, names, speaking, listening]);
 
-  // The rig ships in T-pose with no clips, so arms are relaxed here and driven
-  // by a hand-authored idle so Yamin always feels alive.
+  // The rig ships in a T-pose with no clips, so the arms are relaxed here and a
+  // hand-authored idle (breathing, sway, head life) keeps Yamin feeling alive.
   const bones = useMemo(() => {
-    const find = (name: string) => model.getObjectByName(name) as THREE.Bone | undefined;
-    const found: string[] = [];
-    model.traverse((o) => {
-      if ((o as THREE.Bone).isBone) found.push(o.name);
-    });
-    console.log("YAMIN_BONES", found.slice(0, 12).join(","), found.length);
+    const find = (name: string) => {
+      const bone = model.getObjectByName(name) as THREE.Bone | undefined;
+      return bone ? { bone, rest: bone.rotation.clone() } : undefined;
+    };
     return {
       leftArm: find("LeftArm"),
       rightArm: find("RightArm"),
@@ -136,31 +134,39 @@ function AvatarModel({
     };
   }, [model]);
 
+  const pose = (
+    target: { bone: THREE.Bone; rest: THREE.Euler } | undefined,
+    dx: number,
+    dy: number,
+    dz: number,
+  ) => {
+    if (!target) return;
+    target.bone.rotation.set(
+      target.rest.x + dx,
+      target.rest.y + dy,
+      target.rest.z + dz,
+    );
+  };
+
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     const breath = Math.sin(t * 1.2) * 0.03;
     const energy = speaking ? 1.6 : listening ? 1.1 : 0.6;
 
-    if (bones.leftArm) {
-      bones.leftArm.rotation.z = -1.16 - breath;
-      bones.leftArm.rotation.y = 0.16;
-    }
-    if (bones.rightArm) {
-      bones.rightArm.rotation.z = 1.16 + breath;
-      bones.rightArm.rotation.y = -0.16;
-    }
-    if (bones.leftForeArm) bones.leftForeArm.rotation.y = -0.34 + breath;
-    if (bones.rightForeArm) bones.rightForeArm.rotation.y = 0.34 - breath;
-    if (bones.spine) {
-      bones.spine.rotation.x = breath * 0.5;
-      bones.spine.rotation.y = Math.sin(t * 0.45) * 0.05 * energy;
-    }
-    if (bones.neck) bones.neck.rotation.y = Math.sin(t * 0.7 + 0.6) * 0.07 * energy;
-    if (bones.head) {
-      bones.head.rotation.y = Math.sin(t * 0.55) * 0.09 * energy;
-      bones.head.rotation.x = Math.sin(t * 0.9) * 0.035 * energy;
-    }
+    pose(bones.leftArm, 0, 0, 1.18 + breath);
+    pose(bones.rightArm, 0, 0, -1.18 - breath);
+    pose(bones.leftForeArm, 0, 0, 0.3 + breath);
+    pose(bones.rightForeArm, 0, 0, -0.3 - breath);
+    pose(bones.spine, breath * 0.4, Math.sin(t * 0.45) * 0.04 * energy, 0);
+    pose(bones.neck, 0, Math.sin(t * 0.7 + 0.6) * 0.06 * energy, 0);
+    pose(
+      bones.head,
+      Math.sin(t * 0.9) * 0.03 * energy,
+      Math.sin(t * 0.55) * 0.08 * energy,
+      0,
+    );
   });
+
 
   // Auto-fit: measure the posed rig for a few frames, normalize it to a fixed
   // height standing on the floor, then frame the camera on the requested crop.
