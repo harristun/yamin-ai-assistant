@@ -1,7 +1,5 @@
 import { Canvas } from "@react-three/fiber";
 import {
-  Bounds,
-  Center,
   ContactShadows,
   Environment,
   OrbitControls,
@@ -17,10 +15,17 @@ import baseColorAsset from "@/assets/yamin_basecolor.webp.asset.json";
 import normalAsset from "@/assets/yamin_normal.webp.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
 
-const FRAMING: Record<Breakpoint, { fov: number; margin: number; height: number }> = {
-  mobile: { fov: 30, margin: 1.25, height: 0.45 },
-  tablet: { fov: 34, margin: 1.15, height: 0.35 },
-  desktop: { fov: 38, margin: 1.05, height: 0.25 },
+type Framing = {
+  fov: number;
+  position: [number, number, number];
+  target: [number, number, number];
+};
+
+// Portrait-style framing on small screens, more of the figure as space grows.
+const FRAMING: Record<Breakpoint, Framing> = {
+  mobile: { fov: 30, position: [0, 1.5, 1.5], target: [0, 1.42, 0] },
+  tablet: { fov: 32, position: [0, 1.4, 2.1], target: [0, 1.3, 0] },
+  desktop: { fov: 34, position: [0, 1.35, 2.7], target: [0, 1.15, 0] },
 };
 
 function AvatarModel({ speaking, listening }: { speaking: boolean; listening: boolean }) {
