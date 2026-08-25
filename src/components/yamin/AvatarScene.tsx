@@ -25,9 +25,9 @@ type Framing = {
 
 // Portrait-style framing on small screens, more of the figure as space grows.
 const FRAMING: Record<Breakpoint, Framing> = {
-  mobile: { fov: 30, focus: 0.86, distance: 0.95 },
-  tablet: { fov: 32, focus: 0.8, distance: 1.25 },
-  desktop: { fov: 34, focus: 0.72, distance: 1.6 },
+  mobile: { fov: 28, focus: 0.88, distance: 0.72 },
+  tablet: { fov: 30, focus: 0.85, distance: 0.9 },
+  desktop: { fov: 32, focus: 0.82, distance: 1.05 },
 };
 
 const FIGURE_HEIGHT = 1.7;
@@ -115,6 +115,47 @@ function AvatarModel({
     const action = first ? actions[first] : undefined;
     if (action) action.timeScale = speaking ? 1.25 : listening ? 1.05 : 0.85;
   }, [actions, names, speaking, listening]);
+
+  // The rig ships in T-pose with no clips, so arms are relaxed here and driven
+  // by a hand-authored idle so Yamin always feels alive.
+  const bones = useMemo(() => {
+    const find = (name: string) => model.getObjectByName(name) as THREE.Bone | undefined;
+    return {
+      leftArm: find("LeftArm"),
+      rightArm: find("RightArm"),
+      leftForeArm: find("LeftForeArm"),
+      rightForeArm: find("RightForeArm"),
+      spine: find("Spine"),
+      neck: find("Neck"),
+      head: find("Head"),
+    };
+  }, [model]);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    const breath = Math.sin(t * 1.2) * 0.03;
+    const energy = speaking ? 1.6 : listening ? 1.1 : 0.6;
+
+    if (bones.leftArm) {
+      bones.leftArm.rotation.z = -1.16 - breath;
+      bones.leftArm.rotation.y = 0.16;
+    }
+    if (bones.rightArm) {
+      bones.rightArm.rotation.z = 1.16 + breath;
+      bones.rightArm.rotation.y = -0.16;
+    }
+    if (bones.leftForeArm) bones.leftForeArm.rotation.y = -0.34 + breath;
+    if (bones.rightForeArm) bones.rightForeArm.rotation.y = 0.34 - breath;
+    if (bones.spine) {
+      bones.spine.rotation.x = breath * 0.5;
+      bones.spine.rotation.y = Math.sin(t * 0.45) * 0.05 * energy;
+    }
+    if (bones.neck) bones.neck.rotation.y = Math.sin(t * 0.7 + 0.6) * 0.07 * energy;
+    if (bones.head) {
+      bones.head.rotation.y = Math.sin(t * 0.55) * 0.09 * energy;
+      bones.head.rotation.x = Math.sin(t * 0.9) * 0.035 * energy;
+    }
+  });
 
   // Auto-fit: measure the posed rig for a few frames, normalize it to a fixed
   // height standing on the floor, then frame the camera on the requested crop.
