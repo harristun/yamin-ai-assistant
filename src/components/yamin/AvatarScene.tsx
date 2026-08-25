@@ -108,8 +108,8 @@ function AvatarModel({
     return fbx;
   }, [fbx, baseColor]);
 
-  // Two idle clips (dwarf idle + standing idle) picked at random and
-  // cross-faded, so she never loops the exact same motion for long.
+  // Idle library. `idle-long` is the resting base loop; the others are
+  // variations she drifts into when the user has been quiet for a while.
   const clips = useMemo(() => {
     const out: THREE.AnimationClip[] = [];
     const push = (source: THREE.Group, name: string) => {
@@ -122,48 +122,156 @@ function AvatarModel({
       copy.tracks = copy.tracks.filter((track) => !/Hips\.position$/.test(track.name));
       out.push(copy);
     };
+    push(idleLong, "idle-long");
+    push(idleActive, "idle-active");
     push(idleDwarf, "idle-dwarf");
     push(idleStanding, "idle-standing");
     return out;
-  }, [idleDwarf, idleStanding]);
+  }, [idleLong, idleActive, idleDwarf, idleStanding]);
 
   const { actions, names } = useAnimations(clips, group);
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState("idle-long");
 
+  // Base loop starts as soon as the clips are ready.
   useEffect(() => {
-    if (!names.length) return;
-    setActive(Math.floor(Math.random() * names.length));
+    if (names.length) setActive(names.includes("idle-long") ? "idle-long" : names[0]!);
   }, [names]);
 
+  // Crossfade between whichever variation is selected.
+  const previous = useRef<string | null>(null);
   useEffect(() => {
-    const name = names[active];
-    if (!name) return;
-    const action = actions[name];
+    const action = actions[active];
     if (!action) return;
-    action.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(0.6).play();
+    const from = previous.current ? actions[previous.current] : undefined;
+    action.reset().setLoop(THREE.LoopRepeat, Infinity).setEffectiveWeight(1).fadeIn(0.9).play();
+    if (from && from !== action) from.crossFadeTo(action, 0.9, true);
+    previous.current = active;
+  }, [actions, active]);
 
-    let timer = 0;
-    const schedule = () => {
-      timer = window.setTimeout(
-        () => {
-          setActive((prev) => (names.length > 1 ? (prev + 1 + Math.floor(Math.random() * (names.length - 1))) % names.length : prev));
-        },
-        8000 + Math.random() * 6000,
-      );
+  // After 5s of no interaction she starts wandering through the idle
+  // variations, each one held for roughly its own length before the next
+  // random pick. Any interaction pulls her back to the base loop.
+  useEffect(() => {
+    if (names.length < 2) return;
+    let idleTimer = 0;
+    let cycleTimer = 0;
+
+    const cycle = () => {
+      setActive((prev) => {
+        const pool = names.filter((n) => n !== prev);
+        return pool[Math.floor(Math.random() * pool.length)] ?? prev;
+      });
+      cycleTimer = window.setTimeout(cycle, 9000 + Math.random() * 7000);
     };
-    schedule();
 
+    const arm = () => {
+      window.clearTimeout(idleTimer);
+      window.clearTimeout(cycleTimer);
+      idleTimer = window.setTimeout(cycle, 5000);
+    };
+
+    const wake = () => {
+      setActive(names.includes("idle-long") ? "idle-long" : names[0]!);
+      arm();
+    };
+
+    arm();
+    const events: (keyof WindowEventMap)[] = [
+      "pointerdown",
+      "pointermove",
+      "keydown",
+      "wheel",
+      "touchstart",
+    ];
+    events.forEach((e) => window.addEventListener(e, wake, { passive: true }));
     return () => {
-      window.clearTimeout(timer);
-      action.fadeOut(0.6);
+      window.clearTimeout(idleTimer);
+      window.clearTimeout(cycleTimer);
+      events.forEach((e) => window.removeEventListener(e, wake));
     };
-  }, [actions, names, active]);
+  }, [names]);
+
+  // Talking / listening keeps her on the responsive loop and slightly livelier.
+  useEffect(() => {
+    if (!names.length) return;
+    if (speaking || listening) {
+      setActive(names.includes("idle-active") ? "idle-active" : names[0]!);
+    }
+  }, [names, speaking, listening]);
 
   useEffect(() => {
-    const name = names[active];
-    const action = name ? actions[name] : undefined;
-    if (action) action.timeScale = speaking ? 1.15 : listening ? 1.05 : 0.95;
-  }, [actions, names, active, speaking, listening]);
+    const action = actions[active];
+    if (action) action.timeScale = speaking ? 1.12 : listening ? 1.04 : 0.94;
+  }, [actions, active, speaking, listening]);
+
+  // Facial life: blink + smile through morph targets when the mesh ships them,
+  // plus subtle head micro-motion so she keeps engaging with the viewer.
+  const faces = useMemo(() => {
+    const found: { mesh: THREE.Mesh; blink: number[]; smile: number[] }[] = [];
+    model.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      const dict = mesh.morphTargetDictionary;
+      if (!mesh.isMesh || !dict) return;
+      const pick = (re: RegExp) =>
+        Object.keys(dict)
+          .filter((k) => re.test(k))
+          .map((k) => dict[k]!);
+      const blink = pick(/blink|eyeclos|eye_close/i);
+      const smile = pick(/smile|mouthsmile|happy/i);
+      if (blink.length || smile.length) found.push({ mesh, blink, smile });
+    });
+    return found;
+  }, [model]);
+
+  const head = useMemo(() => {
+    let bone: THREE.Object3D | null = null;
+    model.traverse((child) => {
+      if (!bone && /(^|:|_)Head$/i.test(child.name)) bone = child;
+    });
+    return bone as THREE.Object3D | null;
+  }, [model]);
+
+  const face = useRef({ nextBlink: 1.5, blink: 0, smile: 0, nextSmile: 3, smileHold: 0 });
+
+  useFrame((state, delta) => {
+    const f = face.current;
+    const t = state.clock.elapsedTime;
+
+    // Blink: quick double-lid close at random intervals.
+    f.nextBlink -= delta;
+    if (f.nextBlink <= 0) {
+      f.blink = 1;
+      f.nextBlink = 2.4 + Math.random() * 4.2;
+    }
+    f.blink = Math.max(0, f.blink - delta * 7);
+
+    // Smile: warm expression that fades in and lingers, more often while she
+    // is speaking or listening to the user.
+    f.nextSmile -= delta;
+    if (f.nextSmile <= 0) {
+      f.smileHold = 1.6 + Math.random() * 2.4;
+      f.nextSmile = (speaking || listening ? 4 : 7) + Math.random() * 6;
+    }
+    f.smileHold = Math.max(0, f.smileHold - delta);
+    const smileTarget = f.smileHold > 0 ? (speaking ? 0.85 : 0.6) : 0.12;
+    f.smile += (smileTarget - f.smile) * Math.min(1, delta * 3);
+
+    const blinkValue = Math.sin(Math.min(1, f.blink) * Math.PI);
+    for (const entry of faces) {
+      const influences = entry.mesh.morphTargetInfluences;
+      if (!influences) continue;
+      for (const i of entry.blink) influences[i] = blinkValue;
+      for (const i of entry.smile) influences[i] = f.smile;
+    }
+
+    // Head micro-motion layered on top of the baked clip.
+    if (head) {
+      head.rotation.y += Math.sin(t * 0.45) * 0.035;
+      head.rotation.x += Math.sin(t * 0.7 + 1.1) * 0.02 - f.smile * 0.015;
+      head.rotation.z += Math.sin(t * 0.33 + 2.2) * 0.018;
+    }
+  }, 1);
+
 
   // Auto-fit: measure the posed rig for a few frames, normalize it to a fixed
   // height standing on the floor, then frame the camera on the requested crop.
