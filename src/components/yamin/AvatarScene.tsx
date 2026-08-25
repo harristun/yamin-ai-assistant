@@ -32,7 +32,15 @@ const FRAMING: Record<Breakpoint, Framing> = {
 
 const FIGURE_HEIGHT = 1.7;
 
-function AvatarModel({ speaking, listening }: { speaking: boolean; listening: boolean }) {
+function AvatarModel({
+  speaking,
+  listening,
+  framing,
+}: {
+  speaking: boolean;
+  listening: boolean;
+  framing: Framing;
+}) {
   const fbx = useFBX(modelAsset.url);
   const textures = useTexture([baseColorAsset.url, normalAsset.url]);
   const baseColor = textures[0]!;
@@ -108,6 +116,46 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
     if (action) action.timeScale = speaking ? 1.25 : listening ? 1.05 : 0.85;
   }, [actions, names, speaking, listening]);
 
+  // Auto-fit: measure the posed rig for a few frames, normalize it to a fixed
+  // height standing on the floor, then frame the camera on the requested crop.
+  const camera = useThree((state) => state.camera);
+  const controls = useThree((state) => state.controls) as
+    | { target: THREE.Vector3; update: () => void }
+    | null;
+  const passes = useRef(0);
+
+  useEffect(() => {
+    passes.current = 0;
+  }, [framing]);
+
+  useFrame(() => {
+    if (passes.current > 6) return;
+    passes.current += 1;
+    const root = group.current;
+    if (!root) return;
+
+    root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    if (!Number.isFinite(size.y) || size.y <= 0) return;
+
+    model.scale.multiplyScalar(FIGURE_HEIGHT / size.y);
+    root.updateMatrixWorld(true);
+    const scaled = new THREE.Box3().setFromObject(root);
+    const center = scaled.getCenter(new THREE.Vector3());
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+    model.position.y -= scaled.min.y;
+
+    const focusY = FIGURE_HEIGHT * framing.focus;
+    camera.position.set(0, focusY, FIGURE_HEIGHT * framing.distance);
+    camera.lookAt(0, focusY, 0);
+    if (controls) {
+      controls.target.set(0, focusY, 0);
+      controls.update();
+    }
+  });
+
   return (
     <group ref={group} dispose={null}>
       <primitive object={model} />
@@ -131,7 +179,12 @@ export default function AvatarScene({
       shadows
       dpr={[1, 2]}
       gl={{ antialias: true, alpha: true }}
-      camera={{ position: framing.position, fov: framing.fov, near: 0.1, far: 100 }}
+      camera={{
+        position: [0, FIGURE_HEIGHT * framing.focus, FIGURE_HEIGHT * framing.distance],
+        fov: framing.fov,
+        near: 0.1,
+        far: 100,
+      }}
     >
       <ambientLight intensity={0.7} />
       <directionalLight
@@ -151,7 +204,7 @@ export default function AvatarScene({
       <pointLight position={[2.2, 1.4, -2]} intensity={1.1} color="#7fd9b0" />
       <pointLight position={[0, 1.2, 2.4]} intensity={0.7} color="#ffd9a8" />
 
-      <AvatarModel speaking={speaking} listening={listening} />
+      <AvatarModel speaking={speaking} listening={listening} framing={framing} />
 
       <ContactShadows
         position={[0, 0.005, 0]}
@@ -164,7 +217,6 @@ export default function AvatarScene({
       <Environment preset="city" environmentIntensity={0.7} />
       <OrbitControls
         makeDefault
-        target={framing.target}
         enablePan={false}
         enableZoom={breakpoint !== "mobile"}
         minDistance={0.9}
