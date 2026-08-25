@@ -244,8 +244,7 @@ function AvatarModel({
     if (action) action.timeScale = speaking ? 1.12 : listening ? 1.04 : 0.94;
   }, [actions, active, speaking, listening]);
 
-  // Facial life: blink + smile through morph targets when the mesh ships them,
-  // plus subtle head micro-motion so she keeps engaging with the viewer.
+  // Facial life: blink + smile through morph targets when the mesh ships them.
   const faces = useMemo(() => {
     const found: { mesh: THREE.Mesh; blink: number[]; smile: number[] }[] = [];
     model.traverse((child) => {
@@ -313,12 +312,35 @@ function AvatarModel({
       const side = /^[a-z]+[TB]?L\d*$/i.test(n) ? 1 : -1;
       if (/^lidT[LR]\d*$/i.test(n)) lidTop.push(make(child, side));
       else if (/^lidB[LR]\d*$/i.test(n)) lidBottom.push(make(child, side));
-      else if (/^lip[TB][LR]001$/i.test(n)) lipCorner.push(make(child, side));
+      else if (/^lip[TB][LR](?:001)?$/i.test(n)) lipCorner.push(make(child, side));
       else if (/^cheek[TB][LR]\d*$/i.test(n)) cheek.push(make(child, side));
       else if (/^brow[TB][LR]\d*$/i.test(n)) brow.push(make(child, side));
     });
 
     return { lidTop, lidBottom, lipCorner, cheek, brow };
+  }, [model]);
+
+  // The exported character carries two upper-body chains: the baked idles drive
+  // Hips -> Spine -> neck -> Head, while the facial bones live under a separate
+  // spine004 -> spine005 -> spine006 -> face chain. Without this retarget, the
+  // face bones hold the head area in its rest pose and make the head look pinned.
+  const faceFollower = useMemo(() => {
+    const faceRoot = model.getObjectByName("spine004");
+    const head = model.getObjectByName("Head");
+    if (!faceRoot || !head) return null;
+
+    model.updateMatrixWorld(true);
+    return {
+      faceRoot,
+      head,
+      offset: head.matrixWorld.clone().invert().multiply(faceRoot.matrixWorld),
+      desiredWorld: new THREE.Matrix4(),
+      localMatrix: new THREE.Matrix4(),
+      parentWorldInverse: new THREE.Matrix4(),
+      position: new THREE.Vector3(),
+      quaternion: new THREE.Quaternion(),
+      scale: new THREE.Vector3(),
+    };
   }, [model]);
 
   const face = useRef({ nextBlink: 1.5, blink: 0, smile: 0, nextSmile: 3, smileHold: 0 });
@@ -354,6 +376,33 @@ function AvatarModel({
       for (const i of entry.smile) influences[i] = f.smile;
     }
 
+    if (faceFollower) {
+      model.updateMatrixWorld(true);
+      faceFollower.desiredWorld.multiplyMatrices(
+        faceFollower.head.matrixWorld,
+        faceFollower.offset,
+      );
+      const parent = faceFollower.faceRoot.parent;
+      if (parent) {
+        faceFollower.parentWorldInverse.copy(parent.matrixWorld).invert();
+        faceFollower.localMatrix.multiplyMatrices(
+          faceFollower.parentWorldInverse,
+          faceFollower.desiredWorld,
+        );
+      } else {
+        faceFollower.localMatrix.copy(faceFollower.desiredWorld);
+      }
+      faceFollower.localMatrix.decompose(
+        faceFollower.position,
+        faceFollower.quaternion,
+        faceFollower.scale,
+      );
+      faceFollower.faceRoot.position.copy(faceFollower.position);
+      faceFollower.faceRoot.quaternion.copy(faceFollower.quaternion);
+      faceFollower.faceRoot.scale.copy(faceFollower.scale);
+      faceFollower.faceRoot.updateMatrixWorld(true);
+    }
+
     // Bone-driven face: lids slide shut, lip corners and cheeks lift. Offsets are
     // metres in world space, converted per bone into its parent space.
     // Only face bones are touched — the head bone itself is left entirely to the
@@ -367,13 +416,13 @@ function AvatarModel({
 
     const lidClose = blinkValue * (1 - f.smile * 0.1);
     // A smile narrows the eyes slightly on top of any blink.
-    const lidSquint = f.smile * 0.3;
+    const lidSquint = f.smile * 0.34;
     for (const e of faceRig.lidTop) shift(e, -0.009 * (lidClose + lidSquint), 0);
-    for (const e of faceRig.lidBottom) shift(e, 0.004 * lidClose + 0.0025 * f.smile, 0);
+    for (const e of faceRig.lidBottom) shift(e, 0.004 * lidClose + 0.003 * f.smile, 0);
 
-    for (const e of faceRig.lipCorner) shift(e, 0.020 * f.smile, 0.014 * f.smile);
-    for (const e of faceRig.cheek) shift(e, 0.012 * f.smile, 0.003 * f.smile);
-    for (const e of faceRig.brow) shift(e, 0.004 * f.smile, 0);
+    for (const e of faceRig.lipCorner) shift(e, 0.026 * f.smile, 0.018 * f.smile);
+    for (const e of faceRig.cheek) shift(e, 0.016 * f.smile, 0.004 * f.smile);
+    for (const e of faceRig.brow) shift(e, 0.005 * f.smile, 0);
   });
 
 
