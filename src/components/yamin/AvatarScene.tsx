@@ -49,16 +49,17 @@ const FRAMING: Record<Breakpoint, Framing> = {
 
 const FIGURE_HEIGHT = 1.7;
 
-const VARIATION_CLIPS = [
+const IDLE_CLIPS = [
+  { url: idleLongAsset.url, name: "idle-long" },
   { url: idleActiveAsset.url, name: "idle-active" },
   { url: idleDwarfAsset.url, name: "idle-dwarf" },
   { url: idleStandingAsset.url, name: "idle-standing" },
 ];
 
 /**
- * Loads the idle variation FBX files one after another (with a couple of
- * retries) instead of suspending on all of them at once. Each file is ~12 MB,
- * and parallel requests of that size make Safari abort with "Load failed".
+ * Loads every animation FBX one after another instead of making any animation
+ * a blocking Suspense dependency. Each file is ~12 MB, and transient CDN or
+ * browser failures must never take down the avatar canvas.
  */
 function useStreamedClips() {
   const [clips, setClips] = useState<THREE.AnimationClip[]>([]);
@@ -68,7 +69,7 @@ function useStreamedClips() {
     (async () => {
       const { FBXLoader } = await import("three-stdlib");
       const loader = new FBXLoader();
-      for (const entry of VARIATION_CLIPS) {
+      for (const entry of IDLE_CLIPS) {
         for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
           try {
             const group = (await loader.loadAsync(entry.url)) as THREE.Group;
@@ -85,7 +86,9 @@ function useStreamedClips() {
             }
             break;
           } catch {
-            await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 900 * 2 ** attempt));
+            }
           }
         }
       }
@@ -108,7 +111,6 @@ function AvatarModel({
   framing: Framing;
 }) {
   const fbx = useFBX(modelAsset.url);
-  const idleLong = useFBX(idleLongAsset.url);
   const baseColor = useTexture(textureAsset.url);
   const group = useRef<THREE.Group>(null);
 
@@ -158,21 +160,10 @@ function AvatarModel({
     return fbx;
   }, [fbx, baseColor]);
 
-  // Idle library. `idle-long` is the resting base loop (loaded up front); the
-  // variation clips stream in one at a time afterwards — each FBX is ~12 MB and
-  // requesting them all in parallel made the browser abort the downloads.
-  const extraClips = useStreamedClips();
-  const clips = useMemo(() => {
-    const out: THREE.AnimationClip[] = [];
-    const clip = idleLong.animations[0];
-    if (clip) {
-      const copy = clip.clone();
-      copy.name = "idle-long";
-      copy.tracks = copy.tracks.filter((track) => !/Hips\.position$/.test(track.name));
-      out.push(copy);
-    }
-    return [...out, ...extraClips];
-  }, [idleLong, extraClips]);
+  // The model renders immediately in its bind pose; all idles stream in
+  // sequentially. A failed animation request therefore degrades gracefully
+  // rather than rejecting Suspense and blanking the entire page.
+  const clips = useStreamedClips();
 
   const { actions, names } = useAnimations(clips, group);
   const [active, setActive] = useState("idle-long");
@@ -318,37 +309,14 @@ function AvatarModel({
   }, 1);
 
 
-  // Auto-fit: measure the posed rig for a few frames, normalize it to a fixed
-  // height standing on the floor, then frame the camera on the requested crop.
+  // The model is normalized once above. Only update the camera here; repeatedly
+  // measuring an animated SkinnedMesh and multiplying its scale can collapse
+  // or fling it out of frame as the skeleton updates.
   const camera = useThree((state) => state.camera);
   const controls = useThree((state) => state.controls) as
     | { target: THREE.Vector3; update: () => void }
     | null;
-  const passes = useRef(0);
-
   useEffect(() => {
-    passes.current = 0;
-  }, [framing]);
-
-  useFrame(() => {
-    if (passes.current > 6) return;
-    passes.current += 1;
-    const root = group.current;
-    if (!root) return;
-
-    root.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
-    if (!Number.isFinite(size.y) || size.y <= 0) return;
-
-    model.scale.multiplyScalar(FIGURE_HEIGHT / size.y);
-    root.updateMatrixWorld(true);
-    const scaled = new THREE.Box3().setFromObject(root);
-    const center = scaled.getCenter(new THREE.Vector3());
-    model.position.x -= center.x;
-    model.position.z -= center.z;
-    model.position.y -= scaled.min.y;
-
     const focusY = FIGURE_HEIGHT * framing.focus;
     camera.position.set(0, focusY, FIGURE_HEIGHT * framing.distance);
     camera.lookAt(0, focusY, 0);
@@ -356,7 +324,8 @@ function AvatarModel({
       controls.target.set(0, focusY, 0);
       controls.update();
     }
-  });
+    camera.updateProjectionMatrix();
+  }, [camera, controls, framing]);
 
   return (
     <Group ref={group} dispose={null}>
