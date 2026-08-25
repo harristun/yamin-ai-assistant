@@ -7,12 +7,13 @@ import {
   useFBX,
   useTexture,
 } from "@react-three/drei";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-import modelAsset from "@/assets/yamin.fbx.asset.json";
-import baseColorAsset from "@/assets/yamin_basecolor.webp.asset.json";
-import normalAsset from "@/assets/yamin_normal.webp.asset.json";
+import modelAsset from "@/assets/yamin_character.fbx.asset.json";
+import textureAsset from "@/assets/yamin_texture.png.asset.json";
+import idleDwarfAsset from "@/assets/yamin_idle_dwarf.fbx.asset.json";
+import idleStandingAsset from "@/assets/yamin_idle_standing.fbx.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
 import { AmbientLight, DirectionalLight, Group, PointLight, Primitive, SpotLight } from "./three-elements";
 
@@ -44,18 +45,17 @@ function AvatarModel({
   framing: Framing;
 }) {
   const fbx = useFBX(modelAsset.url);
-  const textures = useTexture([baseColorAsset.url, normalAsset.url]);
-  const baseColor = textures[0]!;
-  const normal = textures[1]!;
+  const idleDwarf = useFBX(idleDwarfAsset.url);
+  const idleStanding = useFBX(idleStandingAsset.url);
+  const baseColor = useTexture(textureAsset.url);
   const group = useRef<THREE.Group>(null);
 
   const model = useMemo(() => {
-    // The FBX embeds its PBR maps as WebP, which the FBX loader cannot decode,
-    // so the same maps are re-applied here from extracted image assets.
+    // The FBX embeds its PBR maps in a format the loader cannot decode, so the
+    // base colour map is re-applied here from the extracted image asset.
     baseColor.colorSpace = THREE.SRGBColorSpace;
+    baseColor.flipY = false;
     baseColor.needsUpdate = true;
-    normal.colorSpace = THREE.NoColorSpace;
-    normal.needsUpdate = true;
 
     fbx.traverse((child) => {
       const mesh = child as THREE.Mesh;
@@ -70,14 +70,11 @@ function AvatarModel({
         const std = new THREE.MeshStandardMaterial({
           name: m?.name ?? "yamin-skin",
           map: baseColor,
-          normalMap: normal,
-
           color: new THREE.Color("#ffffff"),
           roughness: 0.55,
           metalness: 0.05,
           side: THREE.FrontSide,
         });
-        std.normalScale.set(0.85, 0.85);
         return std;
       });
       mesh.material = Array.isArray(mesh.material) ? upgraded : upgraded[0]!;
@@ -90,7 +87,7 @@ function AvatarModel({
     const box = new THREE.Box3().setFromObject(fbx);
     const size = box.getSize(new THREE.Vector3());
     if (size.y > 0) {
-      const scale = 1.7 / size.y;
+      const scale = FIGURE_HEIGHT / size.y;
       fbx.scale.setScalar(scale);
       fbx.updateMatrixWorld(true);
       const scaled = new THREE.Box3().setFromObject(fbx);
@@ -98,141 +95,64 @@ function AvatarModel({
       fbx.position.set(-center.x, -scaled.min.y, -center.z);
     }
     return fbx;
-  }, [fbx, baseColor, normal]);
+  }, [fbx, baseColor]);
 
-  const { actions, names } = useAnimations(fbx.animations, group);
+  // Two idle clips (dwarf idle + standing idle) picked at random and
+  // cross-faded, so she never loops the exact same motion for long.
+  const clips = useMemo(() => {
+    const out: THREE.AnimationClip[] = [];
+    const push = (source: THREE.Group, name: string) => {
+      const clip = source.animations[0];
+      if (!clip) return;
+      const copy = clip.clone();
+      copy.name = name;
+      // Root translation from the source rig would drift the figure; the idle
+      // clips are meant to play in place.
+      copy.tracks = copy.tracks.filter((track) => !/Hips\.position$/.test(track.name));
+      out.push(copy);
+    };
+    push(idleDwarf, "idle-dwarf");
+    push(idleStanding, "idle-standing");
+    return out;
+  }, [idleDwarf, idleStanding]);
+
+  const { actions, names } = useAnimations(clips, group);
+  const [active, setActive] = useState(0);
 
   useEffect(() => {
-    const first = names[0];
-    if (!first) return;
-    const action = actions[first];
-    action?.reset().fadeIn(0.4).play();
+    if (!names.length) return;
+    setActive(Math.floor(Math.random() * names.length));
+  }, [names]);
+
+  useEffect(() => {
+    const name = names[active];
+    if (!name) return;
+    const action = actions[name];
+    if (!action) return;
+    action.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(0.6).play();
+
+    let timer = 0;
+    const schedule = () => {
+      timer = window.setTimeout(
+        () => {
+          setActive((prev) => (names.length > 1 ? (prev + 1 + Math.floor(Math.random() * (names.length - 1))) % names.length : prev));
+        },
+        8000 + Math.random() * 6000,
+      );
+    };
+    schedule();
+
     return () => {
-      action?.fadeOut(0.3);
+      window.clearTimeout(timer);
+      action.fadeOut(0.6);
     };
-  }, [actions, names]);
+  }, [actions, names, active]);
 
   useEffect(() => {
-    const first = names[0];
-    const action = first ? actions[first] : undefined;
-    if (action) action.timeScale = speaking ? 1.25 : listening ? 1.05 : 0.85;
-  }, [actions, names, speaking, listening]);
-
-  // The rig ships in a T-pose with no clips, so the whole idle is hand authored:
-  // a looping cycle of cute idle sway, a thinking chin-touch, a friendly wave and
-  // a girly hands-up pose, blended smoothly between phases.
-  const bones = useMemo(() => {
-    const find = (name: string) => {
-      const bone = model.getObjectByName(name) as THREE.Bone | undefined;
-      return bone ? { bone, rest: bone.rotation.clone() } : undefined;
-    };
-    return {
-      leftArm: find("LeftArm"),
-      rightArm: find("RightArm"),
-      leftForeArm: find("LeftForeArm"),
-      rightForeArm: find("RightForeArm"),
-      leftHand: find("LeftHand"),
-      rightHand: find("RightHand"),
-      spine: find("Spine"),
-      neck: find("Neck"),
-      head: find("Head"),
-    };
-  }, [model]);
-
-  type Delta = [number, number, number];
-  type PoseSet = Record<string, Delta>;
-
-  const smooth = useRef<PoseSet>({});
-
-  const pose = (
-    key: string,
-    target: { bone: THREE.Bone; rest: THREE.Euler } | undefined,
-    next: Delta,
-    lambda: number,
-  ) => {
-    if (!target) return;
-    const current = smooth.current[key] ?? next;
-    const blended: Delta = [
-      current[0] + (next[0] - current[0]) * lambda,
-      current[1] + (next[1] - current[1]) * lambda,
-      current[2] + (next[2] - current[2]) * lambda,
-    ];
-    smooth.current[key] = blended;
-    target.bone.rotation.set(
-      target.rest.x + blended[0],
-      target.rest.y + blended[1],
-      target.rest.z + blended[2],
-    );
-  };
-
-  const PHASE = 6.5;
-
-  useFrame((state, delta) => {
-    const t = state.clock.elapsedTime;
-    const breath = Math.sin(t * 1.2) * 0.03;
-    const energy = speaking ? 1.6 : listening ? 1.1 : 0.7;
-    const lambda = Math.min(1, delta * 2.6);
-
-    const phase = Math.floor(t / PHASE) % 4;
-    const sway = Math.sin(t * 0.5);
-
-    // Defaults: relaxed cute idle with arms down and a soft elbow bend.
-    let leftArm: Delta = [0, 0, 1.28 + breath];
-    let rightArm: Delta = [0, 0, -1.28 - breath];
-    let leftFore: Delta = [0, 0, 0.34 + breath];
-    let rightFore: Delta = [0, 0, -0.34 - breath];
-    let leftHand: Delta = [0, 0, 0.1];
-    let rightHand: Delta = [0, 0, -0.1];
-    let spine: Delta = [breath * 0.4, sway * 0.05 * energy, sway * 0.03];
-    let neck: Delta = [0, Math.sin(t * 0.7 + 0.6) * 0.06 * energy, 0.04];
-    let head: Delta = [
-      Math.sin(t * 0.9) * 0.03 * energy,
-      Math.sin(t * 0.55) * 0.08 * energy,
-      0.07 + sway * 0.04,
-    ];
-
-    if (phase === 1) {
-      // Thinking: right hand up toward the chin, head tilted and looking away.
-      rightArm = [0.15, -0.1, -1.05];
-      rightFore = [0, -0.35, -1.95];
-      rightHand = [0.15, 0, -0.35];
-      head = [-0.06, -0.16 + Math.sin(t * 0.8) * 0.03, 0.16];
-      neck = [0.05, -0.1, 0.08];
-      spine = [breath * 0.4, -0.06, 0.04];
-    } else if (phase === 2) {
-      // Waving: right arm raised, forearm and hand oscillating.
-      const wave = Math.sin(t * 6.4);
-      rightArm = [0.1, 0, -0.42];
-      rightFore = [0, 0, -0.75 + wave * 0.32];
-      rightHand = [0, 0, wave * 0.4];
-      head = [0.02, 0.1, -0.06 + wave * 0.02];
-      neck = [0, 0.06, -0.04];
-      spine = [breath * 0.4, 0.05, -0.03];
-    } else if (phase === 3) {
-      // Girly cute pose: both hands up near the cheeks, shoulders lifted.
-      const bob = Math.sin(t * 2.2) * 0.06;
-      leftArm = [0.1, 0.1, 1.02];
-      rightArm = [0.1, -0.1, -1.02];
-      leftFore = [0, 0.4, 1.75 + bob];
-      rightFore = [0, -0.4, -1.75 - bob];
-      leftHand = [0, 0, 0.3];
-      rightHand = [0, 0, -0.3];
-      head = [0.05, Math.sin(t * 1.1) * 0.05, -0.2];
-      neck = [-0.04, 0, -0.1];
-      spine = [breath * 0.4, 0.03, -0.05];
-    }
-
-    pose("leftArm", bones.leftArm, leftArm, lambda);
-    pose("rightArm", bones.rightArm, rightArm, lambda);
-    pose("leftFore", bones.leftForeArm, leftFore, lambda);
-    pose("rightFore", bones.rightForeArm, rightFore, lambda);
-    pose("leftHand", bones.leftHand, leftHand, lambda);
-    pose("rightHand", bones.rightHand, rightHand, lambda);
-    pose("spine", bones.spine, spine, lambda);
-    pose("neck", bones.neck, neck, lambda);
-    pose("head", bones.head, head, lambda);
-  });
-
+    const name = names[active];
+    const action = name ? actions[name] : undefined;
+    if (action) action.timeScale = speaking ? 1.15 : listening ? 1.05 : 0.95;
+  }, [actions, names, active, speaking, listening]);
 
   // Auto-fit: measure the posed rig for a few frames, normalize it to a fixed
   // height standing on the floor, then frame the camera on the requested crop.
@@ -341,10 +261,8 @@ export default function AvatarScene({
         maxDistance={4.5}
         minPolarAngle={Math.PI / 3.6}
         maxPolarAngle={Math.PI / 1.95}
-        autoRotate={!listening && !speaking}
-        autoRotateSpeed={0.35}
+        autoRotate={false}
       />
     </Canvas>
   );
-
 }
