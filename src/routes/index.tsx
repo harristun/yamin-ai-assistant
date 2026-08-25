@@ -143,11 +143,12 @@ function Index() {
 
         {/* Mobile: single column, tall portrait stage + drawer */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 md:hidden">
-          <div className="mx-auto w-full max-w-sm flex-1">
-            <div className="relative mx-auto h-full min-h-[64vh] w-full">{viewport}</div>
+          <div className="relative mx-auto w-full max-w-sm flex-1 min-h-[64vh]">
+            <div className="absolute inset-0">{viewport}</div>
           </div>
           <div className="pb-24">{controls}</div>
         </div>
+
 
         {/* Tablet: tall avatar column with the voice console on the right */}
         <div className="relative hidden min-h-0 flex-1 gap-4 md:flex lg:hidden">
