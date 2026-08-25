@@ -309,37 +309,14 @@ function AvatarModel({
   }, 1);
 
 
-  // Auto-fit: measure the posed rig for a few frames, normalize it to a fixed
-  // height standing on the floor, then frame the camera on the requested crop.
+  // The model is normalized once above. Only update the camera here; repeatedly
+  // measuring an animated SkinnedMesh and multiplying its scale can collapse
+  // or fling it out of frame as the skeleton updates.
   const camera = useThree((state) => state.camera);
   const controls = useThree((state) => state.controls) as
     | { target: THREE.Vector3; update: () => void }
     | null;
-  const passes = useRef(0);
-
   useEffect(() => {
-    passes.current = 0;
-  }, [framing]);
-
-  useFrame(() => {
-    if (passes.current > 6) return;
-    passes.current += 1;
-    const root = group.current;
-    if (!root) return;
-
-    root.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
-    if (!Number.isFinite(size.y) || size.y <= 0) return;
-
-    model.scale.multiplyScalar(FIGURE_HEIGHT / size.y);
-    root.updateMatrixWorld(true);
-    const scaled = new THREE.Box3().setFromObject(root);
-    const center = scaled.getCenter(new THREE.Vector3());
-    model.position.x -= center.x;
-    model.position.z -= center.z;
-    model.position.y -= scaled.min.y;
-
     const focusY = FIGURE_HEIGHT * framing.focus;
     camera.position.set(0, focusY, FIGURE_HEIGHT * framing.distance);
     camera.lookAt(0, focusY, 0);
@@ -347,7 +324,8 @@ function AvatarModel({
       controls.target.set(0, focusY, 0);
       controls.update();
     }
-  });
+    camera.updateProjectionMatrix();
+  }, [camera, controls, framing]);
 
   return (
     <Group ref={group} dispose={null}>
