@@ -1,5 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import {
+  Bounds,
+  Center,
   ContactShadows,
   Environment,
   OrbitControls,
@@ -12,12 +14,10 @@ import * as THREE from "three";
 import modelAsset from "@/assets/yamin.fbx.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
 
-type Framing = { position: [number, number, number]; target: [number, number, number]; fov: number };
-
-const FRAMING: Record<Breakpoint, Framing> = {
-  mobile: { position: [0, 1.55, 2.1], target: [0, 1.45, 0], fov: 30 },
-  tablet: { position: [0, 1.4, 2.9], target: [0, 1.25, 0], fov: 34 },
-  desktop: { position: [0.35, 1.3, 3.6], target: [0, 1.05, 0], fov: 38 },
+const FRAMING: Record<Breakpoint, { fov: number; margin: number; height: number }> = {
+  mobile: { fov: 30, margin: 1.25, height: 0.45 },
+  tablet: { fov: 34, margin: 1.15, height: 0.35 },
+  desktop: { fov: 38, margin: 1.05, height: 0.25 },
 };
 
 function AvatarModel({ speaking, listening }: { speaking: boolean; listening: boolean }) {
@@ -25,43 +25,21 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
   const group = useRef<THREE.Group>(null);
 
   const model = useMemo(() => {
-    const root = fbx;
-    root.position.set(0, 0, 0);
-    root.scale.setScalar(1);
-    root.updateMatrixWorld(true);
-
-    const size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
-    const scale = size.y > 0 ? 1.7 / size.y : 1;
-    root.scale.setScalar(scale);
-    root.updateMatrixWorld(true);
-
-    const box = new THREE.Box3().setFromObject(root);
-    const center = box.getCenter(new THREE.Vector3());
-    root.position.set(-center.x, -box.min.y, -center.z);
-
-    root.traverse((child) => {
+    fbx.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      mesh.material = mats.map((mat) => {
-        const src = mat as THREE.MeshStandardMaterial & { map?: THREE.Texture | null };
-        if (src?.map) {
-          src.needsUpdate = true;
-          return src;
-        }
-        return new THREE.MeshStandardMaterial({
-          color: new THREE.Color("#efe3d2"),
-          roughness: 0.62,
-          metalness: 0.06,
-        });
-      }) as unknown as THREE.Material;
-      if (Array.isArray(mesh.material) && mesh.material.length === 1) {
-        mesh.material = mesh.material[0]!;
-      }
+      mesh.frustumCulled = false;
+      // The FBX references external WebP textures that three.js cannot decode,
+      // so give every surface a soft studio material instead of a black one.
+      mesh.material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color("#eadfd0"),
+        roughness: 0.6,
+        metalness: 0.05,
+      });
     });
-    return root;
+    return fbx;
   }, [fbx]);
 
   const { actions, names } = useAnimations(fbx.animations, group);
@@ -105,12 +83,12 @@ export default function AvatarScene({
       shadows
       dpr={[1, 2]}
       gl={{ antialias: true, alpha: true }}
-      camera={{ position: framing.position, fov: framing.fov, near: 0.1, far: 100 }}
+      camera={{ position: [0, 0.4, 4], fov: framing.fov, near: 0.1, far: 200 }}
     >
-      <ambientLight intensity={0.75} />
+      <ambientLight intensity={0.85} />
       <directionalLight
         position={[3, 5, 4]}
-        intensity={1.15}
+        intensity={1.2}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
@@ -123,23 +101,26 @@ export default function AvatarScene({
         color="#f0c473"
       />
       <pointLight position={[2.6, 1.2, -2.2]} intensity={0.9} color="#7fd9b0" />
-      <AvatarModel speaking={speaking} listening={listening} />
+
+      <Bounds key={breakpoint} fit clip observe margin={framing.margin}>
+        <Center position={[0, framing.height, 0]} disableY={false}>
+          <AvatarModel speaking={speaking} listening={listening} />
+        </Center>
+      </Bounds>
+
       <ContactShadows
-        position={[0, 0.001, 0]}
-        opacity={0.35}
-        scale={7}
-        blur={2.6}
-        far={3}
+        position={[0, -1.05, 0]}
+        opacity={0.3}
+        scale={9}
+        blur={2.8}
+        far={4}
         color="#5a4222"
       />
-      <Environment preset="city" environmentIntensity={0.55} />
+      <Environment preset="city" environmentIntensity={0.6} />
       <OrbitControls
         makeDefault
-        target={framing.target}
         enablePan={false}
         enableZoom={breakpoint !== "mobile"}
-        minDistance={1.4}
-        maxDistance={5}
         minPolarAngle={Math.PI / 4}
         maxPolarAngle={Math.PI / 1.9}
         autoRotate={!listening && !speaking}
