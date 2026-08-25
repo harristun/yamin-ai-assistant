@@ -110,7 +110,7 @@ export function useSpeech(options: {
         analyser.getByteTimeDomainData(data);
         let sum = 0;
         for (let i = 0; i < data.length; i += 1) {
-          const v = (data[i] - 128) / 128;
+          const v = ((data[i] ?? 128) - 128) / 128;
           sum += v * v;
         }
         setLevel(Math.min(1, Math.sqrt(sum / data.length) * 3.2));
