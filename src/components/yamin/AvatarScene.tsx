@@ -321,29 +321,16 @@ function AvatarModel({
       for (const i of entry.smile) influences[i] = f.smile;
     }
 
-    // Head micro-motion layered on top of the baked clip.
+    // Head micro-motion layered on top of the baked clip. This must stay at the
+    // default frame priority: any priority >= 1 switches R3F to a manual render
+    // loop, which stops the canvas from drawing at all.
     if (head) {
       head.rotation.y += Math.sin(t * 0.45) * 0.035;
       head.rotation.x += Math.sin(t * 0.7 + 1.1) * 0.02 - f.smile * 0.015;
       head.rotation.z += Math.sin(t * 0.33 + 2.2) * 0.018;
     }
+  });
 
-    if (import.meta.env.DEV && Math.floor(t) % 2 === 0) {
-      const box = new THREE.Box3().setFromObject(model);
-      (window as any).YAMIN_FIT = {
-        render: { calls: state.gl.info.render.calls, tris: state.gl.info.render.triangles },
-        vis: model.visible,
-        parentVis: model.parent?.visible,
-
-        min: box.min.toArray().map((n) => +n.toFixed(2)),
-        max: box.max.toArray().map((n) => +n.toFixed(2)),
-        scale: model.scale.toArray(),
-        active,
-        clips: names,
-        cam: state.camera.position.toArray().map((n) => +n.toFixed(2)),
-      };
-    }
-  }, 1);
 
 
 
