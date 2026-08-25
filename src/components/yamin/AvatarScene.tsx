@@ -14,6 +14,8 @@ import modelAsset from "@/assets/yamin_character.fbx.asset.json";
 import textureAsset from "@/assets/yamin_texture.png.asset.json";
 import idleDwarfAsset from "@/assets/yamin_idle_dwarf.fbx.asset.json";
 import idleStandingAsset from "@/assets/yamin_idle_standing.fbx.asset.json";
+import idleLongAsset from "@/assets/yamin_idle_long.fbx.asset.json";
+import idleActiveAsset from "@/assets/yamin_idle_active.fbx.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
 import {
   AmbientLight,
