@@ -59,10 +59,7 @@ function AvatarModel({
   framing: Framing;
 }) {
   const fbx = useFBX(modelAsset.url);
-  const idleDwarf = useFBX(idleDwarfAsset.url);
-  const idleStanding = useFBX(idleStandingAsset.url);
   const idleLong = useFBX(idleLongAsset.url);
-  const idleActive = useFBX(idleActiveAsset.url);
   const baseColor = useTexture(textureAsset.url);
   const group = useRef<THREE.Group>(null);
 
