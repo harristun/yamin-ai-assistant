@@ -120,6 +120,11 @@ function AvatarModel({
   // by a hand-authored idle so Yamin always feels alive.
   const bones = useMemo(() => {
     const find = (name: string) => model.getObjectByName(name) as THREE.Bone | undefined;
+    const found: string[] = [];
+    model.traverse((o) => {
+      if ((o as THREE.Bone).isBone) found.push(o.name);
+    });
+    console.log("YAMIN_BONES", found.slice(0, 12).join(","), found.length);
     return {
       leftArm: find("LeftArm"),
       rightArm: find("RightArm"),
@@ -195,6 +200,7 @@ function AvatarModel({
       controls.target.set(0, focusY, 0);
       controls.update();
     }
+    console.log("YAMIN_FIT", JSON.stringify({ y: focusY, z: camera.position.z }));
   });
 
   return (
