@@ -23,11 +23,12 @@ type Framing = {
   distance: number;
 };
 
-// Portrait-style framing on small screens, more of the figure as space grows.
+// Wider, portrait-style framing. Mobile stays pulled back so the face never
+// gets magnified past the texture resolution (it would look pixelated).
 const FRAMING: Record<Breakpoint, Framing> = {
-  mobile: { fov: 28, focus: 0.88, distance: 0.72 },
-  tablet: { fov: 30, focus: 0.85, distance: 0.9 },
-  desktop: { fov: 32, focus: 0.82, distance: 1.05 },
+  mobile: { fov: 30, focus: 0.66, distance: 1.55 },
+  tablet: { fov: 31, focus: 0.66, distance: 1.6 },
+  desktop: { fov: 32, focus: 0.64, distance: 1.7 },
 };
 
 const FIGURE_HEIGHT = 1.7;
@@ -116,8 +117,9 @@ function AvatarModel({
     if (action) action.timeScale = speaking ? 1.25 : listening ? 1.05 : 0.85;
   }, [actions, names, speaking, listening]);
 
-  // The rig ships in a T-pose with no clips, so the arms are relaxed here and a
-  // hand-authored idle (breathing, sway, head life) keeps Yamin feeling alive.
+  // The rig ships in a T-pose with no clips, so the whole idle is hand authored:
+  // a looping cycle of cute idle sway, a thinking chin-touch, a friendly wave and
+  // a girly hands-up pose, blended smoothly between phases.
   const bones = useMemo(() => {
     const find = (name: string) => {
       const bone = model.getObjectByName(name) as THREE.Bone | undefined;
@@ -128,43 +130,106 @@ function AvatarModel({
       rightArm: find("RightArm"),
       leftForeArm: find("LeftForeArm"),
       rightForeArm: find("RightForeArm"),
+      leftHand: find("LeftHand"),
+      rightHand: find("RightHand"),
       spine: find("Spine"),
       neck: find("Neck"),
       head: find("Head"),
     };
   }, [model]);
 
+  type Delta = [number, number, number];
+  type PoseSet = Record<string, Delta>;
+
+  const smooth = useRef<PoseSet>({});
+
   const pose = (
+    key: string,
     target: { bone: THREE.Bone; rest: THREE.Euler } | undefined,
-    dx: number,
-    dy: number,
-    dz: number,
+    next: Delta,
+    lambda: number,
   ) => {
     if (!target) return;
+    const current = smooth.current[key] ?? next;
+    const blended: Delta = [
+      current[0] + (next[0] - current[0]) * lambda,
+      current[1] + (next[1] - current[1]) * lambda,
+      current[2] + (next[2] - current[2]) * lambda,
+    ];
+    smooth.current[key] = blended;
     target.bone.rotation.set(
-      target.rest.x + dx,
-      target.rest.y + dy,
-      target.rest.z + dz,
+      target.rest.x + blended[0],
+      target.rest.y + blended[1],
+      target.rest.z + blended[2],
     );
   };
 
-  useFrame((state) => {
+  const PHASE = 6.5;
+
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime;
     const breath = Math.sin(t * 1.2) * 0.03;
-    const energy = speaking ? 1.6 : listening ? 1.1 : 0.6;
+    const energy = speaking ? 1.6 : listening ? 1.1 : 0.7;
+    const lambda = Math.min(1, delta * 2.6);
 
-    pose(bones.leftArm, 0, 0, 1.31 + breath);
-    pose(bones.rightArm, 0, 0, -1.31 - breath);
-    pose(bones.leftForeArm, 0, 0, 0.3 + breath);
-    pose(bones.rightForeArm, 0, 0, -0.3 - breath);
-    pose(bones.spine, breath * 0.4, Math.sin(t * 0.45) * 0.04 * energy, 0);
-    pose(bones.neck, 0, Math.sin(t * 0.7 + 0.6) * 0.06 * energy, 0);
-    pose(
-      bones.head,
+    const phase = Math.floor(t / PHASE) % 4;
+    const sway = Math.sin(t * 0.5);
+
+    // Defaults: relaxed cute idle with arms down and a soft elbow bend.
+    let leftArm: Delta = [0, 0, 1.28 + breath];
+    let rightArm: Delta = [0, 0, -1.28 - breath];
+    let leftFore: Delta = [0, 0, 0.34 + breath];
+    let rightFore: Delta = [0, 0, -0.34 - breath];
+    let leftHand: Delta = [0, 0, 0.1];
+    let rightHand: Delta = [0, 0, -0.1];
+    let spine: Delta = [breath * 0.4, sway * 0.05 * energy, sway * 0.03];
+    let neck: Delta = [0, Math.sin(t * 0.7 + 0.6) * 0.06 * energy, 0.04];
+    let head: Delta = [
       Math.sin(t * 0.9) * 0.03 * energy,
       Math.sin(t * 0.55) * 0.08 * energy,
-      0,
-    );
+      0.07 + sway * 0.04,
+    ];
+
+    if (phase === 1) {
+      // Thinking: right hand up toward the chin, head tilted and looking away.
+      rightArm = [0.15, -0.1, -1.05];
+      rightFore = [0, -0.35, -1.95];
+      rightHand = [0.15, 0, -0.35];
+      head = [-0.06, -0.16 + Math.sin(t * 0.8) * 0.03, 0.16];
+      neck = [0.05, -0.1, 0.08];
+      spine = [breath * 0.4, -0.06, 0.04];
+    } else if (phase === 2) {
+      // Waving: right arm raised, forearm and hand oscillating.
+      const wave = Math.sin(t * 6.4);
+      rightArm = [0.1, 0, -0.42];
+      rightFore = [0, 0, -0.75 + wave * 0.32];
+      rightHand = [0, 0, wave * 0.4];
+      head = [0.02, 0.1, -0.06 + wave * 0.02];
+      neck = [0, 0.06, -0.04];
+      spine = [breath * 0.4, 0.05, -0.03];
+    } else if (phase === 3) {
+      // Girly cute pose: both hands up near the cheeks, shoulders lifted.
+      const bob = Math.sin(t * 2.2) * 0.06;
+      leftArm = [0.1, 0.1, 1.02];
+      rightArm = [0.1, -0.1, -1.02];
+      leftFore = [0, 0.4, 1.75 + bob];
+      rightFore = [0, -0.4, -1.75 - bob];
+      leftHand = [0, 0, 0.3];
+      rightHand = [0, 0, -0.3];
+      head = [0.05, Math.sin(t * 1.1) * 0.05, -0.2];
+      neck = [-0.04, 0, -0.1];
+      spine = [breath * 0.4, 0.03, -0.05];
+    }
+
+    pose("leftArm", bones.leftArm, leftArm, lambda);
+    pose("rightArm", bones.rightArm, rightArm, lambda);
+    pose("leftFore", bones.leftForeArm, leftFore, lambda);
+    pose("rightFore", bones.rightForeArm, rightFore, lambda);
+    pose("leftHand", bones.leftHand, leftHand, lambda);
+    pose("rightHand", bones.rightHand, rightHand, lambda);
+    pose("spine", bones.spine, spine, lambda);
+    pose("neck", bones.neck, neck, lambda);
+    pose("head", bones.head, head, lambda);
   });
 
 
