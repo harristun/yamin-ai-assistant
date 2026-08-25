@@ -14,6 +14,7 @@ import modelAsset from "@/assets/yamin.fbx.asset.json";
 import baseColorAsset from "@/assets/yamin_basecolor.webp.asset.json";
 import normalAsset from "@/assets/yamin_normal.webp.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
+import { AmbientLight, DirectionalLight, Group, PointLight, Primitive, SpotLight } from "./three-elements";
 
 type Framing = {
   fov: number;
@@ -274,9 +275,9 @@ function AvatarModel({
   });
 
   return (
-    <group ref={group} dispose={null}>
-      <primitive object={model} />
-    </group>
+    <Group ref={group} dispose={null}>
+      <Primitive object={model} />
+    </Group>
   );
 }
 
@@ -303,23 +304,23 @@ export default function AvatarScene({
         far: 100,
       }}
     >
-      <ambientLight intensity={0.7} />
-      <directionalLight
+      <AmbientLight intensity={0.7} />
+      <DirectionalLight
         position={[2.4, 3.6, 3.2]}
         intensity={1.6}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
       />
-      <spotLight
+      <SpotLight
         position={[-2.6, 3.2, -1.8]}
         angle={0.8}
         penumbra={1}
         intensity={speaking ? 3.2 : 2.2}
         color="#f0c473"
       />
-      <pointLight position={[2.2, 1.4, -2]} intensity={1.1} color="#7fd9b0" />
-      <pointLight position={[0, 1.2, 2.4]} intensity={0.7} color="#ffd9a8" />
+      <PointLight position={[2.2, 1.4, -2]} intensity={1.1} color="#7fd9b0" />
+      <PointLight position={[0, 1.2, 2.4]} intensity={0.7} color="#ffd9a8" />
 
       <AvatarModel speaking={speaking} listening={listening} framing={framing} />
 
