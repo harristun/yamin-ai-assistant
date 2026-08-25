@@ -157,26 +157,6 @@ function AvatarModel({
       const center = scaled.getCenter(new THREE.Vector3());
       fbx.position.set(-center.x, -scaled.min.y, -center.z);
     }
-    if (import.meta.env.DEV) {
-      const meshes: any[] = [];
-      fbx.traverse((child) => {
-        const mesh = child as THREE.SkinnedMesh;
-        if (!(mesh as any).isMesh) return;
-        const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as any;
-        meshes.push({
-          name: mesh.name,
-          skinned: !!(mesh as any).isSkinnedMesh,
-          visible: mesh.visible,
-          verts: mesh.geometry?.attributes?.position?.count ?? 0,
-          hasMap: !!mat?.map,
-          mapImg: mat?.map?.image ? `${mat.map.image.width}x${mat.map.image.height}` : null,
-          opacity: mat?.opacity,
-          transparent: mat?.transparent,
-          bones: (mesh as any).skeleton?.bones?.length ?? 0,
-        });
-      });
-      (window as any).YAMIN_MESHES = meshes;
-    }
     return fbx;
   }, [fbx, baseColor]);
 
