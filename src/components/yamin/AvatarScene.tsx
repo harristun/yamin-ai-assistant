@@ -160,7 +160,6 @@ function AvatarModel({
       const center = scaled.getCenter(new THREE.Vector3());
       fbx.position.set(-center.x, -scaled.min.y, -center.z);
     }
-    (window as any).__YM_ROOT = fbx; // DEBUG
     return fbx;
   }, [fbx, baseColor]);
 
@@ -352,7 +351,7 @@ function AvatarModel({
       f.nextSmile = (speaking || listening ? 4 : 7) + Math.random() * 6;
     }
     f.smileHold = Math.max(0, f.smileHold - delta);
-    const smileTarget = (window as any).__YM_FORCE_SMILE ?? (f.smileHold > 0 ? (speaking ? 0.85 : 0.6) : 0.12);
+    const smileTarget = f.smileHold > 0 ? (speaking ? 0.85 : 0.6) : 0.12;
     f.smile += (smileTarget - f.smile) * Math.min(1, delta * 3);
 
     const blinkValue = Math.sin(Math.min(1, f.blink) * Math.PI);
@@ -372,7 +371,7 @@ function AvatarModel({
         .addScaledVector(e.out, outM * e.unit);
     };
 
-    const lidClose = (window as any).__YM_FORCE_BLINK ?? blinkValue * (1 - f.smile * 0.15);
+    const lidClose = blinkValue * (1 - f.smile * 0.15);
     // A smile narrows the eyes slightly on top of any blink.
     const lidSquint = f.smile * 0.18;
     for (const e of faceRig.lidTop) shift(e, -0.009 * (lidClose + lidSquint), 0);
