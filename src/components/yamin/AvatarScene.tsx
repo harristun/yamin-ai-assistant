@@ -65,10 +65,23 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
       });
       mesh.material = Array.isArray(mesh.material) ? upgraded : upgraded[0]!;
     });
+    // Normalize the rig: FBX exports arrive in centimetre scale, so rescale to
+    // a 1.7 unit tall figure standing on the origin regardless of source units.
+    fbx.scale.setScalar(1);
+    fbx.position.set(0, 0, 0);
+    fbx.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(fbx);
+    const size = box.getSize(new THREE.Vector3());
+    if (size.y > 0) {
+      const scale = 1.7 / size.y;
+      fbx.scale.setScalar(scale);
+      fbx.updateMatrixWorld(true);
+      const scaled = new THREE.Box3().setFromObject(fbx);
+      const center = scaled.getCenter(new THREE.Vector3());
+      fbx.position.set(-center.x, -scaled.min.y, -center.z);
+    }
     return fbx;
-
   }, [fbx, baseColor, normal]);
-
 
   const { actions, names } = useAnimations(fbx.animations, group);
 
@@ -111,49 +124,50 @@ export default function AvatarScene({
       shadows
       dpr={[1, 2]}
       gl={{ antialias: true, alpha: true }}
-      camera={{ position: [0, 0.4, 4], fov: framing.fov, near: 0.1, far: 200 }}
+      camera={{ position: framing.position, fov: framing.fov, near: 0.1, far: 100 }}
     >
-      <ambientLight intensity={0.55} />
+      <ambientLight intensity={0.7} />
       <directionalLight
-        position={[3, 5, 4]}
-        intensity={1.2}
+        position={[2.4, 3.6, 3.2]}
+        intensity={1.6}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0004}
       />
       <spotLight
-        position={[-3.2, 3.4, -2.4]}
-        angle={0.7}
+        position={[-2.6, 3.2, -1.8]}
+        angle={0.8}
         penumbra={1}
-        intensity={speaking ? 2.6 : 1.8}
+        intensity={speaking ? 3.2 : 2.2}
         color="#f0c473"
       />
-      <pointLight position={[2.6, 1.2, -2.2]} intensity={0.9} color="#7fd9b0" />
+      <pointLight position={[2.2, 1.4, -2]} intensity={1.1} color="#7fd9b0" />
+      <pointLight position={[0, 1.2, 2.4]} intensity={0.7} color="#ffd9a8" />
 
-      <Bounds key={breakpoint} fit clip observe margin={framing.margin}>
-        <Center position={[0, framing.height, 0]} disableY={false}>
-          <AvatarModel speaking={speaking} listening={listening} />
-        </Center>
-      </Bounds>
+      <AvatarModel speaking={speaking} listening={listening} />
 
       <ContactShadows
-        position={[0, -1.05, 0]}
-        opacity={0.3}
-        scale={9}
-        blur={2.8}
-        far={4}
+        position={[0, 0.005, 0]}
+        opacity={0.35}
+        scale={6}
+        blur={2.6}
+        far={2.5}
         color="#5a4222"
       />
-      <Environment preset="city" environmentIntensity={0.6} />
+      <Environment preset="city" environmentIntensity={0.7} />
       <OrbitControls
         makeDefault
+        target={framing.target}
         enablePan={false}
         enableZoom={breakpoint !== "mobile"}
-        minPolarAngle={Math.PI / 4}
-        maxPolarAngle={Math.PI / 1.9}
+        minDistance={0.9}
+        maxDistance={4.5}
+        minPolarAngle={Math.PI / 3.6}
+        maxPolarAngle={Math.PI / 1.95}
         autoRotate={!listening && !speaking}
         autoRotateSpeed={0.35}
       />
     </Canvas>
   );
+
 }
