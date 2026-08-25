@@ -23,11 +23,12 @@ type Framing = {
   distance: number;
 };
 
-// Portrait-style framing on small screens, more of the figure as space grows.
+// Wider, portrait-style framing. Mobile stays pulled back so the face never
+// gets magnified past the texture resolution (it would look pixelated).
 const FRAMING: Record<Breakpoint, Framing> = {
-  mobile: { fov: 28, focus: 0.88, distance: 0.72 },
-  tablet: { fov: 30, focus: 0.85, distance: 0.9 },
-  desktop: { fov: 32, focus: 0.82, distance: 1.05 },
+  mobile: { fov: 30, focus: 0.66, distance: 1.55 },
+  tablet: { fov: 31, focus: 0.66, distance: 1.6 },
+  desktop: { fov: 32, focus: 0.64, distance: 1.7 },
 };
 
 const FIGURE_HEIGHT = 1.7;
