@@ -141,18 +141,20 @@ function Index() {
           onOpenSettings={() => setDrawerOpen(true)}
         />
 
-        {/* Mobile: single column, 9:16 stage + drawer */}
+        {/* Mobile: single column, tall portrait stage + drawer */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 md:hidden">
           <div className="mx-auto w-full max-w-sm flex-1">
-            <div className="relative mx-auto aspect-9/16 max-h-[62vh] w-full">{viewport}</div>
+            <div className="relative mx-auto h-full min-h-[64vh] w-full">{viewport}</div>
           </div>
           <div className="pb-24">{controls}</div>
         </div>
 
-        {/* Tablet: dual-pane with chat as overlay modal */}
-        <div className="relative hidden min-h-0 flex-1 flex-col gap-4 md:flex lg:hidden">
-          <div className="min-h-0 flex-1">{viewport}</div>
-          <div className="pb-2">{controls}</div>
+        {/* Tablet: tall avatar column with the voice console on the right */}
+        <div className="relative hidden min-h-0 flex-1 gap-4 md:flex lg:hidden">
+          <div className="min-h-0 min-w-0 flex-[2]">{viewport}</div>
+          <aside className="flex min-h-0 w-[240px] shrink-0 flex-col justify-center rounded-2xl glass-panel p-4">
+            {controls}
+          </aside>
           <AnimatePresence>
             {drawerOpen ? (
               <motion.div
@@ -183,29 +185,28 @@ function Index() {
           </AnimatePresence>
           <button
             onClick={() => setDrawerOpen(true)}
-            className="absolute right-4 bottom-28 z-10 grid h-14 w-14 place-items-center rounded-2xl bg-silk text-gold-foreground shadow-glow-gold"
+            className="absolute right-4 bottom-4 z-10 grid h-14 w-14 place-items-center rounded-2xl bg-silk text-gold-foreground shadow-glow-gold"
             aria-label="Open chat"
           >
             <MessageCircle className="h-6 w-6" />
           </button>
         </div>
 
-        {/* Desktop: split dashboard 60 / 40 */}
+        {/* Desktop: tall avatar stage + right rail (voice console over chat) */}
         <div className="hidden min-h-0 flex-1 gap-5 lg:flex">
-          <section className="flex min-h-0 min-w-0 flex-[3] flex-col gap-4">
+          <section className="flex min-h-0 min-w-0 flex-[3] flex-col">
             <div className="min-h-0 flex-1">{viewport}</div>
-            <div className="rounded-2xl glass-panel p-4">{controls}</div>
           </section>
-          {chatVisible ? (
-            <motion.aside
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex min-h-0 w-[38%] max-w-[520px] flex-col"
-            >
-              {chat}
-            </motion.aside>
-          ) : null}
+          <motion.aside
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex min-h-0 w-[38%] max-w-[520px] flex-col gap-4"
+          >
+            <div className="shrink-0 rounded-2xl glass-panel p-4">{controls}</div>
+            {chatVisible ? <div className="min-h-0 flex-1">{chat}</div> : null}
+          </motion.aside>
         </div>
+
       </div>
 
       {/* Mobile bottom drawer */}
