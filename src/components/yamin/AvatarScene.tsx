@@ -42,9 +42,10 @@ type Framing = {
 // Wider, portrait-style framing. Mobile stays pulled back so the face never
 // gets magnified past the texture resolution (it would look pixelated).
 const FRAMING: Record<Breakpoint, Framing> = {
-  mobile: { fov: 30, focus: 0.66, distance: 1.55 },
-  tablet: { fov: 31, focus: 0.66, distance: 1.6 },
-  desktop: { fov: 32, focus: 0.64, distance: 1.7 },
+  mobile: { fov: 30, focus: 0.55, distance: 2.0 },
+  tablet: { fov: 31, focus: 0.55, distance: 2.05 },
+  desktop: { fov: 32, focus: 0.54, distance: 2.15 },
+
 };
 
 const FIGURE_HEIGHT = 1.7;
@@ -159,6 +160,7 @@ function AvatarModel({
     }
     return fbx;
   }, [fbx, baseColor]);
+
 
   // The model renders immediately in its bind pose; all idles stream in
   // sequentially. A failed animation request therefore degrades gracefully
@@ -300,13 +302,17 @@ function AvatarModel({
       for (const i of entry.smile) influences[i] = f.smile;
     }
 
-    // Head micro-motion layered on top of the baked clip.
+    // Head micro-motion layered on top of the baked clip. This must stay at the
+    // default frame priority: any priority >= 1 switches R3F to a manual render
+    // loop, which stops the canvas from drawing at all.
     if (head) {
       head.rotation.y += Math.sin(t * 0.45) * 0.035;
       head.rotation.x += Math.sin(t * 0.7 + 1.1) * 0.02 - f.smile * 0.015;
       head.rotation.z += Math.sin(t * 0.33 + 2.2) * 0.018;
     }
-  }, 1);
+  });
+
+
 
 
   // The model is normalized once above. Only update the camera here; repeatedly
