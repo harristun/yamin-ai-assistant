@@ -10,7 +10,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-import modelAsset from "@/assets/yamin_character.fbx.asset.json";
+import modelAsset from "@/assets/yamin_face.fbx.asset.json";
 import textureAsset from "@/assets/yamin_texture.png.asset.json";
 import idleDwarfAsset from "@/assets/yamin_idle_dwarf.fbx.asset.json";
 import idleStandingAsset from "@/assets/yamin_idle_standing.fbx.asset.json";
@@ -133,7 +133,9 @@ function AvatarModel({
         const m = mat as THREE.MeshPhongMaterial;
         const std = new THREE.MeshStandardMaterial({
           name: m?.name ?? "yamin-skin",
-          map: m?.map ?? baseColor,
+          // The FBX's embedded texture path cannot be fetched (cross-origin
+          // redirect), so always use the extracted colour map asset.
+          map: baseColor,
           color: new THREE.Color("#ffffff"),
           roughness: 0.55,
           metalness: 0.05,
@@ -261,6 +263,64 @@ function AvatarModel({
     return found;
   }, [model]);
 
+  // This rig carries Rigify-style face bones (lid.T/B, lip.T/B, cheek, brow),
+  // so blink + smile are driven directly on the bones. Rest transforms are
+  // captured once and every frame writes rest + delta so the baked body clips
+  // are never fought over.
+  // Bone local axes are arbitrary in this export, so every expression offset is
+  // authored in world space (up / outwards) and converted into the bone's parent
+  // space once. `unit` converts metres into that parent space.
+  type FaceBone = {
+    bone: THREE.Object3D;
+    restPos: THREE.Vector3;
+    /** World "up" expressed in the bone's parent space, unit length. */
+    up: THREE.Vector3;
+    /** World "outwards from the face centre", unit length. */
+    out: THREE.Vector3;
+    /** Metres -> parent-space length. */
+    unit: number;
+  };
+
+  const faceRig = useMemo(() => {
+    const lidTop: FaceBone[] = [];
+    const lidBottom: FaceBone[] = [];
+    const lipCorner: FaceBone[] = [];
+    const cheek: FaceBone[] = [];
+    const brow: FaceBone[] = [];
+
+    model.updateMatrixWorld(true);
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    const p = new THREE.Vector3();
+
+    const make = (child: THREE.Object3D, side: number): FaceBone => {
+      const parent = child.parent ?? child;
+      parent.matrixWorld.decompose(p, q, s);
+      const inv = q.clone().invert();
+      const scale = Math.max((s.x + s.y + s.z) / 3, 1e-6);
+      return {
+        bone: child,
+        restPos: child.position.clone(),
+        up: new THREE.Vector3(0, 1, 0).applyQuaternion(inv).normalize(),
+        out: new THREE.Vector3(side, 0, 0).applyQuaternion(inv).normalize(),
+        unit: 1 / scale,
+      };
+    };
+
+    model.traverse((child) => {
+      const n = child.name;
+      // The FBX export strips the dots from Rigify names: lid.T.L.002 -> lidTL002
+      const side = /^[a-z]+[TB]?L\d*$/i.test(n) ? 1 : -1;
+      if (/^lidT[LR]\d*$/i.test(n)) lidTop.push(make(child, side));
+      else if (/^lidB[LR]\d*$/i.test(n)) lidBottom.push(make(child, side));
+      else if (/^lip[TB][LR]001$/i.test(n)) lipCorner.push(make(child, side));
+      else if (/^cheek[TB][LR]\d*$/i.test(n)) cheek.push(make(child, side));
+      else if (/^brow[TB][LR]\d*$/i.test(n)) brow.push(make(child, side));
+    });
+
+    return { lidTop, lidBottom, lipCorner, cheek, brow };
+  }, [model]);
+
   const head = useMemo(() => {
     let bone: THREE.Object3D | null = null;
     model.traverse((child) => {
@@ -301,6 +361,25 @@ function AvatarModel({
       for (const i of entry.blink) influences[i] = blinkValue;
       for (const i of entry.smile) influences[i] = f.smile;
     }
+
+    // Bone-driven face: lids slide shut, lip corners and cheeks lift. Offsets are
+    // metres in world space, converted per bone into its parent space.
+    const shift = (e: FaceBone, upM: number, outM: number) => {
+      e.bone.position
+        .copy(e.restPos)
+        .addScaledVector(e.up, upM * e.unit)
+        .addScaledVector(e.out, outM * e.unit);
+    };
+
+    const lidClose = blinkValue * (1 - f.smile * 0.15);
+    // A smile narrows the eyes slightly on top of any blink.
+    const lidSquint = f.smile * 0.18;
+    for (const e of faceRig.lidTop) shift(e, -0.009 * (lidClose + lidSquint), 0);
+    for (const e of faceRig.lidBottom) shift(e, 0.004 * lidClose, 0);
+
+    for (const e of faceRig.lipCorner) shift(e, 0.010 * f.smile, 0.007 * f.smile);
+    for (const e of faceRig.cheek) shift(e, 0.006 * f.smile, 0.0015 * f.smile);
+    for (const e of faceRig.brow) shift(e, 0.0015 * f.smile, 0);
 
     // Head micro-motion layered on top of the baked clip. This must stay at the
     // default frame priority: any priority >= 1 switches R3F to a manual render
