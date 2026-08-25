@@ -99,6 +99,7 @@ function AvatarModel({
   }, [fbx, baseColor, normal]);
 
   const { actions, names } = useAnimations(fbx.animations, group);
+  console.log("YAMIN_CLIPS", JSON.stringify(names), fbx.animations.length);
 
   useEffect(() => {
     const first = names[0];
