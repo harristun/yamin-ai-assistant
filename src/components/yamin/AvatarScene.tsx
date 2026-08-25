@@ -16,6 +16,8 @@ import idleDwarfAsset from "@/assets/yamin_idle_dwarf.fbx.asset.json";
 import idleStandingAsset from "@/assets/yamin_idle_standing.fbx.asset.json";
 import idleLongAsset from "@/assets/yamin_idle_long.fbx.asset.json";
 import idleActiveAsset from "@/assets/yamin_idle_active.fbx.asset.json";
+import talking1Asset from "@/assets/yamin_talking1.fbx.asset.json";
+import talking2Asset from "@/assets/yamin_talking2.fbx.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
 import {
   AmbientLight,
@@ -52,10 +54,15 @@ const FIGURE_HEIGHT = 1.7;
 
 const IDLE_CLIPS = [
   { url: idleLongAsset.url, name: "idle-long" },
+  { url: talking1Asset.url, name: "talk-1" },
+  { url: talking2Asset.url, name: "talk-2" },
   { url: idleActiveAsset.url, name: "idle-active" },
   { url: idleDwarfAsset.url, name: "idle-dwarf" },
   { url: idleStandingAsset.url, name: "idle-standing" },
 ];
+
+const TALK_NAMES = ["talk-1", "talk-2"];
+const isIdleName = (name: string) => name.startsWith("idle-");
 
 /**
  * Loads every animation FBX one after another instead of making any animation
@@ -192,13 +199,13 @@ function AvatarModel({
   // variations, each one held for roughly its own length before the next
   // random pick. Any interaction pulls her back to the base loop.
   useEffect(() => {
-    if (names.length < 2) return;
+    if (names.filter(isIdleName).length < 2 || speaking) return;
     let idleTimer = 0;
     let cycleTimer = 0;
 
     const cycle = () => {
       setActive((prev) => {
-        const pool = names.filter((n) => n !== prev);
+        const pool = names.filter((n) => n !== prev && isIdleName(n));
         return pool[Math.floor(Math.random() * pool.length)] ?? prev;
       });
       cycleTimer = window.setTimeout(cycle, 9000 + Math.random() * 7000);
@@ -229,15 +236,39 @@ function AvatarModel({
       window.clearTimeout(cycleTimer);
       events.forEach((e) => window.removeEventListener(e, wake));
     };
-  }, [names]);
+  }, [names, speaking]);
 
-  // Talking / listening keeps her on the responsive loop and slightly livelier.
+  // While she speaks she cycles the two talking takes. Each take is swapped a
+  // little before it ends and crossfaded, so the loop never reads as a loop.
   useEffect(() => {
     if (!names.length) return;
-    if (speaking || listening) {
-      setActive(names.includes("idle-active") ? "idle-active" : names[0]!);
+    const talks = names.filter((n) => TALK_NAMES.includes(n));
+
+    if (!speaking) {
+      if (listening) setActive(names.includes("idle-active") ? "idle-active" : names[0]!);
+      else setActive(names.includes("idle-long") ? "idle-long" : names[0]!);
+      return;
     }
-  }, [names, speaking, listening]);
+    if (!talks.length) {
+      setActive(names.includes("idle-active") ? "idle-active" : names[0]!);
+      return;
+    }
+
+    let timer = 0;
+    const next = () => {
+      let picked = "";
+      setActive((prev) => {
+        const pool = talks.filter((n) => n !== prev);
+        picked = pool[Math.floor(Math.random() * pool.length)] ?? talks[0]!;
+        return picked;
+      });
+      const duration = actions[picked]?.getClip().duration ?? 3;
+      // Re-enter the other take slightly early and from a random offset.
+      timer = window.setTimeout(next, Math.max(1400, (duration - 0.8) * 1000));
+    };
+    next();
+    return () => window.clearTimeout(timer);
+  }, [actions, names, speaking, listening]);
 
   useEffect(() => {
     const action = actions[active];
@@ -284,6 +315,9 @@ function AvatarModel({
     const lidTop: FaceBone[] = [];
     const lidBottom: FaceBone[] = [];
     const lipCorner: FaceBone[] = [];
+    const lipLower: FaceBone[] = [];
+    const lipUpper: FaceBone[] = [];
+    const jaw: FaceBone[] = [];
     // Keep expressions scoped tightly to eyelids and mouth corners. Moving
     // cheek/brow helper bones on this rig also pulls the nose/eye socket area,
     // which creates the occasional warped face seen during idle crossfades.
@@ -314,9 +348,12 @@ function AvatarModel({
       if (/^lidT[LR]\d*$/i.test(n)) lidTop.push(make(child, side));
       else if (/^lidB[LR]\d*$/i.test(n)) lidBottom.push(make(child, side));
       else if (/^lip[TB][LR]001$/i.test(n)) lipCorner.push(make(child, side));
+      else if (/^lipB[LR]$/i.test(n)) lipLower.push(make(child, side));
+      else if (/^lipT[LR]$/i.test(n)) lipUpper.push(make(child, side));
+      else if (/^jaw(?:\d*|Master)?$/i.test(n)) jaw.push(make(child, side));
     });
 
-    return { lidTop, lidBottom, lipCorner };
+    return { lidTop, lidBottom, lipCorner, lipLower, lipUpper, jaw };
   }, [model]);
 
   // The exported character carries two upper-body chains: the baked idles drive
@@ -342,7 +379,15 @@ function AvatarModel({
     };
   }, [model]);
 
-  const face = useRef({ nextBlink: 1.5, blink: 0, smile: 0, nextSmile: 3, smileHold: 0 });
+  const face = useRef({
+    nextBlink: 1.5,
+    blink: 0,
+    smile: 0,
+    nextSmile: 3,
+    smileHold: 0,
+    mouth: 0,
+    phase: 0,
+  });
 
 
   useFrame((_state, delta) => {
@@ -420,6 +465,22 @@ function AvatarModel({
     for (const e of faceRig.lidBottom) shift(e, 0.0032 * lidClose, 0);
 
     for (const e of faceRig.lipCorner) shift(e, 0.017 * f.smile, 0.009 * f.smile);
+
+    // Lip sync: while she speaks the mouth opens on a syllable-rate envelope.
+    f.phase += delta;
+    const envelope = speaking
+      ? Math.max(
+          0,
+          0.55 +
+            0.45 * Math.sin(f.phase * 11.3) * Math.sin(f.phase * 3.1 + 1.2) +
+            0.14 * Math.sin(f.phase * 19.7),
+        )
+      : 0;
+    f.mouth += (Math.min(1, envelope) - f.mouth) * Math.min(1, delta * 16);
+    const open = f.mouth;
+    for (const e of faceRig.jaw) shift(e, -0.011 * open, 0);
+    for (const e of faceRig.lipLower) shift(e, -0.006 * open, 0);
+    for (const e of faceRig.lipUpper) shift(e, 0.002 * open, 0);
   });
 
 
