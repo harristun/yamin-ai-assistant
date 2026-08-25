@@ -321,15 +321,8 @@ function AvatarModel({
     return { lidTop, lidBottom, lipCorner, cheek, brow };
   }, [model]);
 
-  const head = useMemo(() => {
-    let bone: THREE.Object3D | null = null;
-    model.traverse((child) => {
-      if (!bone && /(^|:|_)Head$/i.test(child.name)) bone = child;
-    });
-    return bone as THREE.Object3D | null;
-  }, [model]);
-
   const face = useRef({ nextBlink: 1.5, blink: 0, smile: 0, nextSmile: 3, smileHold: 0 });
+
 
   useFrame((state, delta) => {
     const f = face.current;
