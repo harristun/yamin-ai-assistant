@@ -54,7 +54,6 @@ function AvatarModel({
     // The FBX embeds its PBR maps in a format the loader cannot decode, so the
     // base colour map is re-applied here from the extracted image asset.
     baseColor.colorSpace = THREE.SRGBColorSpace;
-    baseColor.flipY = false;
     baseColor.needsUpdate = true;
 
     fbx.traverse((child) => {
