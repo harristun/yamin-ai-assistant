@@ -106,27 +106,22 @@ function AvatarModel({
       const center = scaled.getCenter(new THREE.Vector3());
       fbx.position.set(-center.x, -scaled.min.y, -center.z);
     }
-    return fbx;
-  }, [fbx, baseColor]);
-
-  // Idle library. `idle-long` is the resting base loop; the others are
-  // variations she drifts into when the user has been quiet for a while.
+  // Idle library. `idle-long` is the resting base loop (loaded up front); the
+  // variation clips stream in one at a time afterwards — each FBX is ~12 MB and
+  // requesting them all in parallel made the browser abort the downloads.
+  const extraClips = useStreamedClips();
   const clips = useMemo(() => {
     const out: THREE.AnimationClip[] = [];
-    const push = (source: THREE.Group, name: string) => {
-      const clip = source.animations[0];
-      if (!clip) return;
+    const clip = idleLong.animations[0];
+    if (clip) {
       const copy = clip.clone();
-      copy.name = name;
-      // Root translation from the source rig would drift the figure; the idle
-      // clips are meant to play in place.
+      copy.name = "idle-long";
       copy.tracks = copy.tracks.filter((track) => !/Hips\.position$/.test(track.name));
       out.push(copy);
-    };
-    push(idleLong, "idle-long");
-    push(idleActive, "idle-active");
-    push(idleDwarf, "idle-dwarf");
-    push(idleStanding, "idle-standing");
+    }
+    return [...out, ...extraClips];
+  }, [idleLong, extraClips]);
+
     return out;
   }, [idleLong, idleActive, idleDwarf, idleStanding]);
 
