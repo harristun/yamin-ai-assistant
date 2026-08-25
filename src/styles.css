@@ -19,6 +19,19 @@
  */
 
 @theme inline {
+  --font-sans: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-burmese: "Padauk", "Noto Sans Myanmar", sans-serif;
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-jade: var(--jade);
+  --color-jade-foreground: var(--jade-foreground);
+  --color-ruby: var(--ruby);
+  --color-ruby-foreground: var(--ruby-foreground);
+  --color-glass: var(--glass);
+  --color-glass-border: var(--glass-border);
+  --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-float-slow: float-slow 9s ease-in-out infinite;
+  --animate-shimmer: shimmer 2.2s linear infinite;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -141,4 +154,102 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+}
+
+:root {
+  --gold: oklch(0.82 0.13 82);
+  --gold-foreground: oklch(0.28 0.06 70);
+  --jade: oklch(0.62 0.1 165);
+  --jade-foreground: oklch(0.98 0.01 165);
+  --ruby: oklch(0.55 0.19 18);
+  --ruby-foreground: oklch(0.98 0.01 18);
+  --glass: oklch(1 0 0 / 55%);
+  --glass-border: oklch(1 0 0 / 70%);
+  --gradient-aura: radial-gradient(
+    120% 100% at 50% 0%,
+    color-mix(in oklab, var(--gold) 26%, transparent) 0%,
+    color-mix(in oklab, var(--jade) 16%, transparent) 45%,
+    transparent 78%
+  );
+  --gradient-silk: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--gold) 55%, white),
+    color-mix(in oklab, var(--ruby) 30%, white) 55%,
+    color-mix(in oklab, var(--jade) 40%, white)
+  );
+  --shadow-glass: 0 18px 50px -22px oklch(0.28 0.06 70 / 32%);
+  --shadow-glow-gold: 0 0 0 1px color-mix(in oklab, var(--gold) 45%, transparent),
+    0 12px 40px -10px color-mix(in oklab, var(--gold) 55%, transparent);
+}
+
+@theme inline {
+  --background-image-aura: var(--gradient-aura);
+  --background-image-silk: var(--gradient-silk);
+  --shadow-glass: var(--shadow-glass);
+  --shadow-glow-gold: var(--shadow-glow-gold);
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@utility glass-panel {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: var(--shadow-glass);
+}
+
+@utility silk-pattern {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in oklab, var(--gold) 18%, transparent) 0 1px,
+      transparent 1px 11px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in oklab, var(--jade) 14%, transparent) 0 1px,
+      transparent 1px 11px
+    );
+}
+
+@utility skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--gold) 10%, transparent),
+    color-mix(in oklab, var(--gold) 30%, transparent),
+    color-mix(in oklab, var(--gold) 10%, transparent)
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
 }
