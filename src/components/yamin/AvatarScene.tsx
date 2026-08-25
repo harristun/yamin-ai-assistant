@@ -77,6 +77,8 @@ function AvatarModel({
         return std;
       });
       mesh.material = Array.isArray(mesh.material) ? upgraded : upgraded[0]!;
+      // eslint-disable-next-line
+      (window as any).__YAMIN_MATS = [...((window as any).__YAMIN_MATS ?? []), ...source.map((mm) => ({ name: (mm as any)?.name, hasMap: !!(mm as any)?.map, uvs: Object.keys(mesh.geometry.attributes) }))];
     });
     // Normalize the rig: FBX exports arrive in centimetre scale, so rescale to
     // a 1.7 unit tall figure standing on the origin regardless of source units.
