@@ -49,6 +49,55 @@ const FRAMING: Record<Breakpoint, Framing> = {
 
 const FIGURE_HEIGHT = 1.7;
 
+const VARIATION_CLIPS = [
+  { url: idleActiveAsset.url, name: "idle-active" },
+  { url: idleDwarfAsset.url, name: "idle-dwarf" },
+  { url: idleStandingAsset.url, name: "idle-standing" },
+];
+
+/**
+ * Loads the idle variation FBX files one after another (with a couple of
+ * retries) instead of suspending on all of them at once. Each file is ~12 MB,
+ * and parallel requests of that size make Safari abort with "Load failed".
+ */
+function useStreamedClips() {
+  const [clips, setClips] = useState<THREE.AnimationClip[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { FBXLoader } = await import("three-stdlib");
+      const loader = new FBXLoader();
+      for (const entry of VARIATION_CLIPS) {
+        for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
+          try {
+            const group = (await loader.loadAsync(entry.url)) as THREE.Group;
+            const clip = group.animations[0];
+            if (clip && !cancelled) {
+              const copy = clip.clone();
+              copy.name = entry.name;
+              copy.tracks = copy.tracks.filter(
+                (track) => !/Hips\.position$/.test(track.name),
+              );
+              setClips((prev) =>
+                prev.some((c) => c.name === copy.name) ? prev : [...prev, copy],
+              );
+            }
+            break;
+          } catch {
+            await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+          }
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return clips;
+}
+
 function AvatarModel({
   speaking,
   listening,
