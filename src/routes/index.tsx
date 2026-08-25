@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronUp, MessageCircle, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { AvatarViewport } from "@/components/yamin/AvatarViewport";
 import { ChatPanel } from "@/components/yamin/ChatPanel";
@@ -10,6 +10,8 @@ import { VoiceControls } from "@/components/yamin/VoiceControls";
 import type { AssistantStatus, ChatMessage } from "@/components/yamin/types";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { useSpeech } from "@/hooks/useSpeech";
+import { yaminChat } from "@/lib/yamin.functions";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -43,14 +45,6 @@ const WELCOME: ChatMessage = {
   time: now(),
 };
 
-function reply(input: string) {
-  const t = input.toLowerCase();
-  if (t.includes("translate")) return "Sure — say a Burmese sentence and I'll translate it into English.";
-  if (t.includes("teach")) return "ဗမာစကားတစ်ခု: “ကျေးဇူးတင်ပါတယ်” means “thank you”. Try saying it!";
-  if (input.includes("မင်္ဂလာ")) return "မင်္ဂလာပါရှင်! ဒီနေ့ ဘာကူညီပေးရမလဲ?";
-  return `သင်ပြောသည်မှာ: “${input}” — ကျွန်မ နားလည်ပါတယ်၊ ဆက်ပြောပါ။`;
-}
-
 function Index() {
   const breakpoint = useBreakpoint();
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME]);
@@ -58,7 +52,10 @@ function Index() {
   const [muted, setMuted] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [chatVisible, setChatVisible] = useState(true);
-  const [lang] = useState("my-MM");
+
+  const askYamin = useServerFn(yaminChat);
+  const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
+  const speakRef = useRef<(text: string) => void>(() => {});
 
   const handleUserText = useCallback(
     (text: string) => {
@@ -66,23 +63,35 @@ function Index() {
         ...prev,
         { id: `u-${Date.now()}`, role: "user", text, time: now() },
       ]);
+      historyRef.current = [...historyRef.current, { role: "user" as const, content: text }].slice(-12);
       setThinking(true);
-      window.setTimeout(() => {
-        const answer = reply(text);
+      void (async () => {
+        let answer: string;
+        try {
+          const res = await askYamin({ data: { messages: historyRef.current } });
+          answer = res.text;
+          historyRef.current = [
+            ...historyRef.current,
+            { role: "assistant" as const, content: answer },
+          ].slice(-12);
+        } catch (err) {
+          console.error(err);
+          answer = "တောင်းပန်ပါတယ် — connection မကောင်းဘူးထင်တယ်။ Please try again.";
+        }
         setMessages((prev) => [
           ...prev,
           { id: `a-${Date.now()}`, role: "assistant", text: answer, time: now() },
         ]);
         setThinking(false);
-        speakRef.current?.(answer);
-      }, 900);
+        speakRef.current(answer);
+      })();
     },
-    [],
+    [askYamin],
   );
 
-  const speech = useSpeech({ lang, muted, onFinalTranscript: handleUserText });
-  const speakRef = useMemo(() => ({ current: speech.speak }), [speech.speak]);
+  const speech = useSpeech({ muted, onFinalTranscript: handleUserText });
   speakRef.current = speech.speak;
+
 
   const status: AssistantStatus = speech.listening
     ? "listening"
@@ -110,7 +119,7 @@ function Index() {
       speaking={speech.speaking}
       muted={muted}
       supported={speech.supported}
-      lang={lang}
+      lang="auto"
       onToggleListening={toggleListening}
       onToggleMute={() => setMuted((m) => !m)}
     />

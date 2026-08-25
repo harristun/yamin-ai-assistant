@@ -65,13 +65,13 @@ export function VoiceControls({
 
       <div className="flex flex-wrap items-center justify-center gap-2">
         <span className="rounded-full border border-glass-border bg-background/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-          {lang === "my-MM" ? "my-MM (Burmese)" : lang}
+          {lang === "auto" ? "ဗမာ + English · auto" : lang}
         </span>
         <span className="text-[11px] text-muted-foreground">
           {supported
             ? listening
-              ? "Listening — tap to stop"
-              : "Tap or hold to speak"
+              ? "Live — speak, she replies when you pause"
+              : "Tap to start the live conversation"
             : "Voice input not supported in this browser"}
         </span>
       </div>
