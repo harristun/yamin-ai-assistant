@@ -49,16 +49,17 @@ const FRAMING: Record<Breakpoint, Framing> = {
 
 const FIGURE_HEIGHT = 1.7;
 
-const VARIATION_CLIPS = [
+const IDLE_CLIPS = [
+  { url: idleLongAsset.url, name: "idle-long" },
   { url: idleActiveAsset.url, name: "idle-active" },
   { url: idleDwarfAsset.url, name: "idle-dwarf" },
   { url: idleStandingAsset.url, name: "idle-standing" },
 ];
 
 /**
- * Loads the idle variation FBX files one after another (with a couple of
- * retries) instead of suspending on all of them at once. Each file is ~12 MB,
- * and parallel requests of that size make Safari abort with "Load failed".
+ * Loads every animation FBX one after another instead of making any animation
+ * a blocking Suspense dependency. Each file is ~12 MB, and transient CDN or
+ * browser failures must never take down the avatar canvas.
  */
 function useStreamedClips() {
   const [clips, setClips] = useState<THREE.AnimationClip[]>([]);
@@ -68,7 +69,7 @@ function useStreamedClips() {
     (async () => {
       const { FBXLoader } = await import("three-stdlib");
       const loader = new FBXLoader();
-      for (const entry of VARIATION_CLIPS) {
+      for (const entry of IDLE_CLIPS) {
         for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
           try {
             const group = (await loader.loadAsync(entry.url)) as THREE.Group;
@@ -85,7 +86,9 @@ function useStreamedClips() {
             }
             break;
           } catch {
-            await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 900 * 2 ** attempt));
+            }
           }
         }
       }
@@ -108,7 +111,6 @@ function AvatarModel({
   framing: Framing;
 }) {
   const fbx = useFBX(modelAsset.url);
-  const idleLong = useFBX(idleLongAsset.url);
   const baseColor = useTexture(textureAsset.url);
   const group = useRef<THREE.Group>(null);
 
@@ -158,21 +160,10 @@ function AvatarModel({
     return fbx;
   }, [fbx, baseColor]);
 
-  // Idle library. `idle-long` is the resting base loop (loaded up front); the
-  // variation clips stream in one at a time afterwards — each FBX is ~12 MB and
-  // requesting them all in parallel made the browser abort the downloads.
-  const extraClips = useStreamedClips();
-  const clips = useMemo(() => {
-    const out: THREE.AnimationClip[] = [];
-    const clip = idleLong.animations[0];
-    if (clip) {
-      const copy = clip.clone();
-      copy.name = "idle-long";
-      copy.tracks = copy.tracks.filter((track) => !/Hips\.position$/.test(track.name));
-      out.push(copy);
-    }
-    return [...out, ...extraClips];
-  }, [idleLong, extraClips]);
+  // The model renders immediately in its bind pose; all idles stream in
+  // sequentially. A failed animation request therefore degrades gracefully
+  // rather than rejecting Suspense and blanking the entire page.
+  const clips = useStreamedClips();
 
   const { actions, names } = useAnimations(clips, group);
   const [active, setActive] = useState("idle-long");
