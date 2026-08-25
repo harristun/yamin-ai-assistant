@@ -99,7 +99,6 @@ function AvatarModel({
   }, [fbx, baseColor, normal]);
 
   const { actions, names } = useAnimations(fbx.animations, group);
-  console.log("YAMIN_CLIPS", JSON.stringify(names), fbx.animations.length);
 
   useEffect(() => {
     const first = names[0];
@@ -154,8 +153,8 @@ function AvatarModel({
     const breath = Math.sin(t * 1.2) * 0.03;
     const energy = speaking ? 1.6 : listening ? 1.1 : 0.6;
 
-    pose(bones.leftArm, 0, 0, 1.18 + breath);
-    pose(bones.rightArm, 0, 0, -1.18 - breath);
+    pose(bones.leftArm, 0, 0, 1.31 + breath);
+    pose(bones.rightArm, 0, 0, -1.31 - breath);
     pose(bones.leftForeArm, 0, 0, 0.3 + breath);
     pose(bones.rightForeArm, 0, 0, -0.3 - breath);
     pose(bones.spine, breath * 0.4, Math.sin(t * 0.45) * 0.04 * energy, 0);
