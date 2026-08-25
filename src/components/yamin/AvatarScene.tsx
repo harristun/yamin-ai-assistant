@@ -7,11 +7,14 @@ import {
   OrbitControls,
   useAnimations,
   useFBX,
+  useTexture,
 } from "@react-three/drei";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import modelAsset from "@/assets/yamin.fbx.asset.json";
+import baseColorAsset from "@/assets/yamin_basecolor.webp.asset.json";
+import normalAsset from "@/assets/yamin_normal.webp.asset.json";
 import type { Breakpoint } from "@/hooks/useBreakpoint";
 
 const FRAMING: Record<Breakpoint, { fov: number; margin: number; height: number }> = {
@@ -22,9 +25,19 @@ const FRAMING: Record<Breakpoint, { fov: number; margin: number; height: number 
 
 function AvatarModel({ speaking, listening }: { speaking: boolean; listening: boolean }) {
   const fbx = useFBX(modelAsset.url);
+  const [baseColor, normal] = useTexture([baseColorAsset.url, normalAsset.url]);
   const group = useRef<THREE.Group>(null);
 
   const model = useMemo(() => {
+    // The FBX embeds its PBR maps as WebP, which the FBX loader cannot decode,
+    // so the same maps are re-applied here from extracted image assets.
+    baseColor.colorSpace = THREE.SRGBColorSpace;
+    baseColor.flipY = false;
+    baseColor.needsUpdate = true;
+    normal.colorSpace = THREE.NoColorSpace;
+    normal.flipY = false;
+    normal.needsUpdate = true;
+
     fbx.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -32,42 +45,25 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
 
-      // Keep the FBX's embedded textures, but upgrade the legacy Phong/Lambert
-      // materials to PBR so the avatar reads correctly under studio lighting.
       const source = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const upgraded = source.map((mat) => {
-        const m = mat as THREE.MeshPhongMaterial & { normalMap?: THREE.Texture };
-        if (!m) return mat;
-        if ((m as unknown as THREE.MeshStandardMaterial).isMeshStandardMaterial) return mat;
-
-        const map = m.map ?? null;
-        if (map) {
-          map.colorSpace = THREE.SRGBColorSpace;
-          map.needsUpdate = true;
-        }
-        const normalMap = m.normalMap ?? null;
-        if (normalMap) {
-          normalMap.colorSpace = THREE.NoColorSpace;
-          normalMap.needsUpdate = true;
-        }
-
+        const m = mat as THREE.MeshPhongMaterial;
         const std = new THREE.MeshStandardMaterial({
-          name: m.name,
-          map,
-          normalMap,
-          color: map ? new THREE.Color("#ffffff") : new THREE.Color("#eadfd0"),
-          roughness: 0.62,
-          metalness: 0.04,
-          transparent: m.transparent,
-          opacity: m.opacity,
-          side: m.side,
-        } as THREE.MeshStandardMaterialParameters);
-        if (normalMap) std.normalScale.set(0.9, 0.9);
+          name: m?.name ?? "yamin-skin",
+          map: baseColor,
+          normalMap: normal,
+          color: new THREE.Color("#ffffff"),
+          roughness: 0.55,
+          metalness: 0.05,
+          side: THREE.FrontSide,
+        });
+        std.normalScale.set(0.85, 0.85);
         return std;
       });
       mesh.material = Array.isArray(mesh.material) ? upgraded : upgraded[0]!;
     });
     return fbx;
+
   }, [fbx]);
 
 
