@@ -61,7 +61,6 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
           transparent: m.transparent,
           opacity: m.opacity,
           side: m.side,
-          skinning: false,
         } as THREE.MeshStandardMaterialParameters);
         if (normalMap) std.normalScale.set(0.9, 0.9);
         return std;
@@ -115,7 +114,7 @@ export default function AvatarScene({
       gl={{ antialias: true, alpha: true }}
       camera={{ position: [0, 0.4, 4], fov: framing.fov, near: 0.1, far: 200 }}
     >
-      <ambientLight intensity={0.85} />
+      <ambientLight intensity={0.55} />
       <directionalLight
         position={[3, 5, 4]}
         intensity={1.2}
