@@ -25,22 +25,43 @@ function AvatarModel({ speaking, listening }: { speaking: boolean; listening: bo
   const group = useRef<THREE.Group>(null);
 
   const model = useMemo(() => {
-    const clone = fbx.clone(true);
-    const box = new THREE.Box3().setFromObject(clone);
-    const size = new THREE.Vector3();
-    box.getSize(size);
+    const root = fbx;
+    root.position.set(0, 0, 0);
+    root.scale.setScalar(1);
+    root.updateMatrixWorld(true);
+
+    const size = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
     const scale = size.y > 0 ? 1.7 / size.y : 1;
-    clone.scale.setScalar(scale);
-    const scaled = new THREE.Box3().setFromObject(clone);
-    clone.position.y -= scaled.min.y;
-    clone.traverse((child) => {
+    root.scale.setScalar(scale);
+    root.updateMatrixWorld(true);
+
+    const box = new THREE.Box3().setFromObject(root);
+    const center = box.getCenter(new THREE.Vector3());
+    root.position.set(-center.x, -box.min.y, -center.z);
+
+    root.traverse((child) => {
       const mesh = child as THREE.Mesh;
-      if (mesh.isMesh) {
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mesh.material = mats.map((mat) => {
+        const src = mat as THREE.MeshStandardMaterial & { map?: THREE.Texture | null };
+        if (src?.map) {
+          src.needsUpdate = true;
+          return src;
+        }
+        return new THREE.MeshStandardMaterial({
+          color: new THREE.Color("#efe3d2"),
+          roughness: 0.62,
+          metalness: 0.06,
+        });
+      }) as unknown as THREE.Material;
+      if (Array.isArray(mesh.material) && mesh.material.length === 1) {
+        mesh.material = mesh.material[0]!;
       }
     });
-    return clone;
+    return root;
   }, [fbx]);
 
   const { actions, names } = useAnimations(fbx.animations, group);
